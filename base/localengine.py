@@ -26,24 +26,25 @@
 #    - Map is currently hard-coded to show player 0's perspective; fix this
 #    - Better window geometry layout so they're not all on top of each other.
 
-import sys,traceback
-
-from worldstate import AntStatus,Ant,AntWorld
-from antsbot import *
-from antsgame import * # Importing * is required to get all of the
-                       # constants from antsgame.py
-from logutil import *
+import sys
+import traceback
+import operator
+import string
+import os
+import tkFont
 from Tkinter import *
 from optparse import OptionParser
 from math import sqrt,floor
 from collections import deque, defaultdict
 from fractions import Fraction
-import operator
-import string
+
+from logutil import *
 from game import Game
-import os
-import tkFont
- 
+from worldstate import AntStatus,Ant,AntWorld
+from antsbot import *
+from antsgame import * # Importing * is required to get all of the
+                       # constants from antsgame.py
+
 # Whether or not to crash the entire game upon invalid moves
 STRICT_MODE = False
 
@@ -420,7 +421,7 @@ class LocalEngine:
       if game.is_alive(b):
         L.debug("Bot %d is alive" % b)
         L.debug("Sending message to bot %d:\n%s" % (b, msg))
-        moves = bot.Receive(msg)
+        moves = bot._receive(msg)
         L.debug("Received moves from bot %d:\n%s" % (b, '\n'.join(moves)))
         bot_moves.append((b, moves))
 
