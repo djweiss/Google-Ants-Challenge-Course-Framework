@@ -1047,7 +1047,16 @@ class Ants(Game):
               position.
             Assumes map is symmetric.
         """
-        ant1, ant2 = self.initial_ant_list[0:2] # assumed one ant per player
+        ant1 = self.initial_ant_list[0]
+        
+        #if only 1 ant, make a virtual ant anti-symmetric to it
+        if len(self.initial_ant_list) < 2:
+            ant2 = ant1
+            ant2.loc = [len(self.map)-ant2.loc[0],len(self.map[0])-ant2.loc[1]]
+        else:
+            ant2 = self.initial_ant_list[1]
+            
+#        ant1, ant2 = self.initial_ant_list[0:2] # assumed one ant per player
         row_t = ant1.loc[0] - ant2.loc[0]
         col_t = ant1.loc[1] - ant2.loc[1]
         food_sets = []
@@ -1102,10 +1111,14 @@ class Ants(Game):
         """ Determine if the game is over
 
             Used by the engine to determine when to finish the game.
-            A game is over when there are no players remaining, or a single
+            A multi-player game is over when there are no players remaining, or a single
               winner remaining.
+            A single player game is basically a hunt for food - it's over when
+            there is no more food on the map.
         """
-        return self.remaining_players() <= 1
+        multiplayer_gameover = self.num_players > 1 and self.remaining_players() <= 1;
+        singleplayer_gameover = self.num_players == 1 and len(self.current_food)==0
+        return multiplayer_gameover or singleplayer_gameover
 
     def kill_player(self, player):
         """ Used by engine to signal that a player is out of the game """

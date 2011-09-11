@@ -21,17 +21,18 @@
 # log files is required.
 #
 # TODO:
-#    - Show graphically which ants will attack each other in combat phase
-#    - Display the turn in the title window
-#    - Map is currently hard-coded to show player 0's perspective; fix this
-#    - Better window geometry layout so they're not all on top of each other.
+#        - Show graphically which ants will attack each other in combat phase
+#        - Display the turn in the title window
+#        - Map is currently hard-coded to show player 0's perspective; fix this
+#        - Better window geometry layout so they're not all on top of each other.
 
 import sys,traceback
 
 from worldstate import AntStatus,Ant,AntWorld
 from antsbot import *
 from antsgame import * # Importing * is required to get all of the
-                       # constants from antsgame.py
+                                             # constants from antsgame.py
+
 from logutil import *
 from Tkinter import *
 from optparse import OptionParser
@@ -48,487 +49,504 @@ import tkFont
 STRICT_MODE = False
 
 global gui
-gui = Frame()  # This is the Tk master object from which all GUI
-               # elements will spawn
+gui = Frame()    # This is the Tk master object from which all GUI
+                             # elements will spawn
 
 # A lookup table for visualizing the map
 MapColors = ['#f00', # ant color 1
-             '#00f', # ant color 2
-             '#000', # unseen
-             '#fee', # conflict(?)
-             '#88f', # water
-             '#fff', # food
-             '#552', # land
-             ]
+                         '#00f', # ant color 2
+                         '#000', # unseen
+                         '#fee', # conflict(?)
+                         '#88f', # water
+                         '#fff', # food
+                         '#555', # land
+                         ]
 
 # A slightly modified version of the original Ants game from
 # antsgame.py: this breaks up the finish_turn() method of the original
 # Ants into two separate functions: FinishTurnMoves() and
 # FinishTurnResolve(), which are explained above.
 class StepAnts(Ants):
-  def __init__(self, options=None):
-    Ants.__init__(self, options)
-   
-  def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
-    # Determine players alive at the start of the turn.  Only these
-    # players will be able to score this turn.
-    self.was_alive = set(i for i in range(self.num_players) if self.is_alive(i))
-    self.do_orders()
+    def __init__(self, options=None):
+        Ants.__init__(self, options)
+     
+    def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
+        # Determine players alive at the start of the turn.    Only these
+        # players will be able to score this turn.
+        self.was_alive = set(i for i in range(self.num_players) if self.is_alive(i))
+        self.do_orders()
 
-  def FinishTurnResolve(self): # Content copied from Ants.finish_turn()
-    # Run attack, food, etc. resolution and scoring.
-    self.do_attack()
-    self.do_spawn()
-    self.food_extra += Fraction(self.food_rate * self.num_players, self.food_turn)
-    food_now = self.food_extra // self.num_players
-    self.food_extra %= self.num_players
-    self.do_food(food_now)
+    def FinishTurnResolve(self): # Content copied from Ants.finish_turn()
+        # Run attack, food, etc. resolution and scoring
+        self.do_attack()
+        self.do_spawn()
+        self.food_extra += Fraction(self.food_rate * self.num_players, self.food_turn)
+        food_now = self.food_extra // self.num_players
+        self.food_extra %= self.num_players
+        self.do_food(food_now)
 
-    # Computes scores for each player.
-    for i, s in enumerate(self.score):
-      if i in self.was_alive:
-        # Update score for those were alive at the START of the turn.
-        self.score_history[i].append(s)
-      else:
-        # Otherwise undo any changes to their score made during this
-        # turn.
-        self.score[i] = self.score_history[i][-1]
-        
-    # Since all the ants have moved we can update the vision.
-    self.update_vision()
-    self.update_revealed()
+        # Computes scores for each player.
+        for i, s in enumerate(self.score):
+            if i in self.was_alive:
+                # Update score for those were alive at the START of the turn.
+                self.score_history[i].append(s)
+            else:
+                # Otherwise undo any changes to their score made during this
+                # turn.
+                self.score[i] = self.score_history[i][-1]
+                
+        # Since all the ants have moved we can update the vision.
+        self.update_vision()
+        self.update_revealed()
 
-# A Tkinter window class that provides a text-based log view. It
-# provides an emit() function that we use to override a standard
-# LogHandler object in order to use the nice Python logging
-# facilities. This way, the window is just another logging
-# destination, and emit() handles all the formatting and display.
-#
-# NOTE: On Mac, trying to set the Font causes Python to crash, so
-# don't mess with the Font.
 class LogWindow(Toplevel):
 
-  # Init takes a botnum parameter to set the title.
-  def __init__(self, master=None, botnum=0): 
-    Toplevel.__init__(self, master)
+    # Init takes a botnum parameter to set the title.
+    def __init__(self, master=None, botnum=0): 
+        Toplevel.__init__(self, master)
 
-    # Setup default window geometry. The format is:
-    # "<width>x<height>+<x-offset>+<y-offset>" or something like that.
-    self.geometry("550x400+%d+%d" % 
-                  (50*botnum,50*botnum))
-    self.title("Bot %d log" % botnum)
-    self.lift() # Move on top of map.
+        # Setup default window geometry. The format is:
+        # "<width>x<height>+<x-offset>+<y-offset>" or something like that.
+        self.geometry("550x400+%d+%d" % 
+                                    (50*botnum,50*botnum))
+        self.title("Bot %d log" % botnum)
+        self.lift() # Move on top of map.
 
-    # Make resizable. (Copied from tutorial).
-    self.frame = Frame(self)
-    self.rowconfigure(0,weight=1)
-    self.columnconfigure(0,weight=1)
-    self.frame.rowconfigure(0,weight=1)
-    self.frame.columnconfigure(0,weight=1)
-    self.frame.grid()
+        # Make resizable. (Copied from tutorial).
+        self.frame = Frame(self)
+        self.rowconfigure(0,weight=1)
+        self.columnconfigure(0,weight=1)
+        self.frame.rowconfigure(0,weight=1)
+        self.frame.columnconfigure(0,weight=1)
+        self.frame.grid()
 
-    # Set up the textbox for the log.  
-    #
-    # TODO: "takefocus=0" means you're not supposed to be able to
-    # enter text as the user, but for some reason it doesn't seem to
-    # work.
-    self.textbox = Text(self.frame,takefocus=0, width=72,height=20, bd=0)
-    self.textbox.grid()
-    
-    # Setup font colors for the difference logging levels through text
-    # tags. The emit() function will tag the text appropriately so
-    # these styles get applied.
-    self.textbox.tag_config("DEBUG", foreground='#999')
-    self.textbox.tag_config("INFO", foreground='#000')
-    self.textbox.tag_config("WARNING", foreground='#f00')
-    self.textbox.tag_config("ERROR", foreground='#f00')
-    self.textbox.tag_config("CRITICAL", foreground='#f00', underline=1)
-    self.textbox.tag_config("header", underline=1)
+        # Set up the textbox for the log.    
+        #
+        # TODO: "takefocus=0" means you're not supposed to be able to
+        # enter text as the user, but for some reason it doesn't seem to
+        # work.
+        self.textbox = Text(self.frame,takefocus=0, width=72,height=20, bd=0)
+        self.textbox.grid()
+        
+        # Setup font colors for the difference logging levels through text
+        # tags. The emit() function will tag the text appropriately so
+        # these styles get applied.
+        self.textbox.tag_config("DEBUG", foreground='#999')
+        self.textbox.tag_config("INFO", foreground='#000')
+        self.textbox.tag_config("WARNING", foreground='#f00')
+        self.textbox.tag_config("ERROR", foreground='#f00')
+        self.textbox.tag_config("CRITICAL", foreground='#f00', underline=1)
+        self.textbox.tag_config("header", underline=1)
 
-    # Set up the scrollbar. (Copied from tutorial).
-    self.scrollY = Scrollbar(self.frame, orient=VERTICAL, command=self.textbox.yview)
-    self.scrollY.grid(row=0, column=1, sticky=N+S)
-    self.textbox["yscrollcommand"] = self.scrollY.set
+        # Set up the scrollbar. (Copied from tutorial).
+        self.scrollY = Scrollbar(self.frame, orient=VERTICAL, command=self.textbox.yview)
+        self.scrollY.grid(row=0, column=1, sticky=N+S)
+        self.textbox["yscrollcommand"] = self.scrollY.set
 
-    # Make a logHandler object and redirect it's emission to me.
-    self.log_handler = logging.StreamHandler()
-    self.log_handler.emit = self.emit
+        # Make a logHandler object and redirect it's emission to me.
+        self.log_handler = logging.StreamHandler()
+        self.log_handler.emit = self.emit
 
-  def emit(self, log_record):
-    # Displays a log record to the textbox and causes the textbox to
-    # scroll.
+    def emit(self, log_record):
+        # Displays a log record to the textbox and causes the textbox to
+        # scroll.
 
-    # Format the message and count the # of lines it will take up.
-    head = "[%s:%d]" % (log_record.funcName, log_record.lineno)
-    msg = " %s\n" % (log_record.msg)
-    lines = len(msg.split('\n'))
+        # Format the message and count the # of lines it will take up.
+        head = "[%s:%d]" % (log_record.funcName, log_record.lineno)
+        msg = " %s\n" % (log_record.msg)
+        lines = len(msg.split('\n'))
 
-    # Insert into the textbox with an extra "header" style underlining
-    # just the filename and line number.
-    self.textbox.insert(INSERT, head, ("header", log_record.levelname))
-    self.textbox.insert(INSERT, msg, (log_record.levelname))
-    self.textbox.yview(SCROLL, lines, UNITS)
+        # Insert into the textbox with an extra "header" style underlining
+        # just the filename and line number.
+        self.textbox.insert(INSERT, head, ("header", log_record.levelname))
+        self.textbox.insert(INSERT, msg, (log_record.levelname))
+        self.textbox.yview(SCROLL, lines, UNITS)
 
 # The actual local engine class. See top of file for description.
 class LocalEngine:
 
-  def __init__(self, game=None):
-    self.bots = []
+    def __init__(self, game=None):
+        self.bots = []
 
-    # Set up the main Tk window which will show the map.
-    gui.grid()
-    gui.master.geometry("100x100+50+50")
-    gui.master.title("World View")
-    gui.master.resizable(False,False)
-    gui.master.lift()
+        # Set up the main Tk window which will show the map.
+        gui.grid()
+        gui.master.geometry("100x100+50+50")
+        gui.master.title("World View")
+        gui.master.resizable(False,False)
+        gui.master.lift()
 
-    # Set up callbacks for user input.
-    gui.bind_all("<KeyPress-Return>", self.RunTurnCallback)
-    gui.bind_all("<KeyPress-q>", self.QuitGameCallback)
+        # Set up callbacks for user input.
+        gui.bind_all("<KeyPress-Return>", self.RunTurnCallback)
+        gui.bind_all("<KeyPress-q>", self.QuitGameCallback)
 
-    # Create a logging window for the main server.
-    self.logwindow = LogWindow(gui,botnum=5) # TODO: Make botnum optional
-    self.logwindow.title("Engine Log")
-    L = logging.getLogger("default") # Use the same logger as the
-                                     # default, so the log also goes
-                                     # to the console.
-    L.setLevel(logging.DEBUG)
-    L.addHandler(self.logwindow.log_handler)
-    self.turn_phase = 0
+        # Create a logging window for the main server.
+        self.logwindow = LogWindow(gui,botnum=5) # TODO: Make botnum optional
+        self.logwindow.title("Engine Log")
+        L = logging.getLogger("default") # Use the same logger as the
+                                                                         # default, so the log also goes
+                                                                         # to the console.
+        L.setLevel(logging.DEBUG)
+        L.addHandler(self.logwindow.log_handler)
+        self.turn_phase = 0
 
-  # Returns a new AntWorld with engine set properly for use by client bots.
-  def GetWorld(self):
-    return AntWorld(engine=self)
+    # Returns a new AntWorld with engine set properly for use by client bots.
+    def GetWorld(self):
+        return AntWorld(engine=self)
+            
 
-  # Adds a given AntsBot object to the list of bots playing the game,
-  # and creates a log window for the bot.
-  def AddBot(self, bot):
-    b = len(self.bots)
+    # Adds a given AntsBot object to the list of bots playing the game,
+    # and creates a log window for the bot.
+    def AddBot(self, bot):
+        b = len(self.bots)
 
-    # Setup log window for specific bot.
-    logwindow = LogWindow(botnum=b)
-    bot.world.L = logging.getLogger("bot: %d" % b)
-    bot.world.L.setLevel(logging.DEBUG)
-    bot.world.L.addHandler(logwindow.log_handler)
+        # Setup log window for specific bot.
+        logwindow = LogWindow(botnum=b)
+        bot.world.L = logging.getLogger("bot: %d" % b)
+        bot.world.L.setLevel(logging.DEBUG)
+        bot.world.L.addHandler(logwindow.log_handler)
 
-    # Add to internal list for playing the game.
-    self.bots.append((b, bot))
+        # Add to internal list for playing the game.
+        self.bots.append((b, bot))
 
-  # Runs the game until completion. Parses command line options.
-  def Run(self, argv):
+    # Runs the game until completion. Parses command line options.
+    def Run(self, argv):
 
-    # Parse command line options and fail if unsuccessful.
-    self.game_opts = self.GetOptions(argv)
-    if self.game_opts == None:
-      return -1
+        # Parse command line options and fail if unsuccessful.
+        self.game_opts = self.GetOptions(argv)
+        if self.game_opts == None:
+            return -1
 
-    L.debug("Starting local game...")
-    L.debug("Using bots: ")
-    for b,bot in self.bots:
-      L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
+        L.debug("Starting local game...")
+        L.debug("Using bots: ")
+        for b,bot in self.bots:
+            L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
 
-    self.game = StepAnts(self.game_opts)
-    L.debug("Game created.");
+        self.game = StepAnts(self.game_opts)
+#        self.game = MazeAnts(self.game_opts)
 
-    self.turn = 0
-    self.InitMap()
-    self.RunTurn()
-    gui.mainloop()
+        L.debug("Game created.");
 
-
-  # Draws the rectangles on the Map GUI window that will be used to
-  # represent game state.
-  def InitMap(self):
-
-    mx = 500 # Map window dimensions
-    my = 500
-    rx = mx / (self.game.width+2) # Rectangle dimensions
-    ry = my / (self.game.height+2)
-
-    # We use a Tk Canvas object for drawing the rectangles.
-    gui.map = Canvas(gui, width=mx,height=my, bg="#AAA")
-    gui.map.grid()
-    gui.mapr = list()
-    for i in range(self.game.height):
-      gui.mapr.append([])
-      for j in range(self.game.width):
-
-        # Get rectangle coordinates and draw the rectangle.
-        x0 = rx*(j+1)
-        x1 = rx*(j+2)
-        y0 = ry*(i+1)
-        y1 = ry*(i+2)
-        gui.mapr[i].append(
-          gui.map.create_rectangle(x0, y0, x1, y1, fill='#fff'))
-    
-    # Update the geometry of the master window to reflect the desired
-    # map window size.
-    gui.master.geometry("%dx%d+0+20" % (mx,my))
-
-  # Renders a map based on the mapdata array, where mapdata takes on
-  # one of the states from the MapColors array.
-  def RenderMap(self, mapdata):
-    for i in range(self.game.height):
-      for j in range(self.game.width):
-        color = '#999'
-
-        # TODO For some reason, sometimes the mapdata gets assigned
-        # None and this was causing the code to crash.
-        if mapdata[i][j] != None:
-          color = MapColors[mapdata[i][j]]
+        self.turn = 0
+        self.InitMap()
+        gui.master.lift()
+        if self.game_opts['step_through']:
+            gui.mainloop()
         else:
-          L.error("mapdata[%d][%d] is None" % (i,j))
-
-        # Update rectangle colors.
-        gui.map.itemconfigure(gui.mapr[i][j], fill=color)
-
-  # Renders a colored map to represent arbitrary floating point data
-  # values. "Red" is hotter (larger), "Blue" is cooler (smaller).
-  def RenderHeatMap(self, mapdata, minval=None, maxval=None):
-
-    # Concatenates mapdata into a single list.
-    vals = list()
-    for i in range(self.game.height):
-      for j in range(self.game.width):
-        vals.append(float(mapdata[i][j]))
-
-    # Get min and max value if not specified.
-    if minval == None:
-      minval = min(vals)
-    if maxval == None:
-      maxval = max(vals)
-
-    # Compute the colormap, blue going into red in 32 distinct
-    # hexadecimal colors.
-    hexvals = '0123456789abcdef'
-    cols = list()
-    for i in range(16):
-      cols.append('#' + hexvals[i] + hexvals[i] + hexvals[-(i+1)])
-    for i in range(16):
-      cols.append('#f' + hexvals[-(i+1)] + '0')
-
-    for i in range(self.game.height):
-      for j in range(self.game.width):
-
-        # Truncate extreme values.
-        c = float(mapdata[i][j])
-        if c < minval: 
-          c = minval;
-        if c > maxval:
-          c = maxval;
-
-        # Determine which of the 32 colors this square will use.
-        colidx = int(floor( ((c-minval)/(maxval-minval) * 31) ))
-        if colidx > 32 or colidx < 0:
-          L.error("WTF? colidx = " + str(colidx) + ", c = " + str(c) 
-                  + ", minval = " + str(minval) + ", maxval = " 
-                  + str(maxval))
-        gui.map.itemconfigure(gui.mapr[i][j], 
-                              fill=cols[colidx])
-
-  # Tk callback event for quitting.
-  def QuitGameCallback(self, event):
-    L.info("Abort! Quitting...")
-    sys.exit()
-
-  # Tk callback event for stepping through to the next turn.
-  def RunTurnCallback(self, event):
-    try:
-      self.RunTurn()
-    except Exception as e:
-      traceback.print_exc(file=sys.stderr)
-      sys.exit()
-
-  # Steps through 1/2 of a turn.
-  def RunTurn(self):
-    game = self.game  # shortcut
-
-    if self.turn == game.turns or game.game_over():
-      L.info("Game finished at turn %d" % self.turn);
-      L.info("Game over? " + str(game.game_over()))
-      gui.quit()
-      game.finish_game()
-      return
-  
-    # Initial turn is a special case. 
-    if self.turn == 0:
-      L.debug("Starting game....")
-      game.start_game()
-
-      # For debugging, keep track of what water was revealed to which
-      # bot (this was a very annoying bug).
-      self.water = [game.revealed_water[b] for b in range(game.num_players)]
-
-      # Send starting game state to bots, but don't do anything with
-      # their response.
-      self.SendAndRcvMessages() 
-
-      # Turn 0 is over. Now 1/2 phase turns can begin.
-      self.turn += 1
-
-    if self.turn_phase == 0: # Movement phase, beginning of turn
-      L.debug("Starting turn: %d" % self.turn)
-
-      # Send game state from last turn to bots and get messages.
-      self.SendAndRcvMessages()    
-      game.FinishTurnMoves()
-
-      self.turn_phase = 1
-
-    else: # Combat, food, etc. resolution phase
+            while True:  
+                gui.update()
+                if self.RunTurn() == 0:
+                    break
+        0
+        print "*"*20
+        print "Game Summary"
+        print "*"*20
+        for b in self.bots:
+            print "bot %d: %.02f points" % (b[0],float(self.game.score[b[0]]))
+        print "-"*20
+#        gui.mainloop()
       
-      # Finish game turn logic.
-      game.FinishTurnResolve()
 
-      # Again, keep track of revealed water for bugfinding.
-      for p in range(len(self.bots)):
-        self.water[p] = self.water[p] + game.revealed_water[p]
-      
-      # Reset turn phase and advance turn.
-      self.turn_phase = 0 
-      self.turn += 1
 
-      # Sanity check: make sure that water that is visible actually
-      # was revealed to the player.
-      for p in range(len(self.bots)):
-        for row, squares in enumerate(game.vision[p]):
-          for col, visible in enumerate(squares):
-            if game.map[row][col] == WATER and visible:
-              if (row,col) not in self.water[p]:
-                L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
+    # Draws the rectangles on the Map GUI window that will be used to
+    # represent game state.
+    def InitMap(self):
 
-    # Update the map regardless of turn phase. TODO Perspective is hard coded.
-    self.RenderMap(game.get_perspective(0));
+        mx = self.game.width*10 # Map window dimensions
+        my = self.game.height*10
+        rx = mx / (self.game.width+2) # Rectangle dimensions
+        ry = my / (self.game.height+2)
 
-  # Sends game states to bots, receives messages, and clears game
-  # state for the next turn.
-  def SendAndRcvMessages(self):
-    game = self.game
+        # We use a Tk Canvas object for drawing the rectangles.
+        gui.map = Canvas(gui, width=mx,height=my, bg="#AAA")
+        gui.map.grid()
+        gui.mapr = list()
+        for i in range(self.game.height):
+            gui.mapr.append([])
+            for j in range(self.game.width):
 
-    bot_moves = []  # Movement cache
+                # Get rectangle coordinates and draw the rectangle.
+                x0 = rx*(j+1)
+                x1 = rx*(j+2)
+                y0 = ry*(i+1)
+                y1 = ry*(i+2)
+                gui.mapr[i].append(
+                    gui.map.create_rectangle(x0, y0, x1, y1, fill='#fff'))
+        
+        # Update the geometry of the master window to reflect the desired
+        # map window size.
+        gui.master.geometry("%dx%d+0+20" % (mx,my))
 
-    for b, bot in self.bots:
-      msg = None
+    # Renders a map based on the mapdata array, where mapdata takes on
+    # one of the states from the MapColors array.
+    def RenderMap(self, mapdata):
+        for i in range(self.game.height):
+            for j in range(self.game.width):
+                color = '#999'
 
-      # Get message to send to player depending on turn.
-      if self.turn == 0:
-        msg = game.get_player_start(b) + 'ready\n'
-      else:
-        msg = game.get_player_state(b) + 'go\n'
+                # TODO For some reason, sometimes the mapdata gets assigned
+                # None and this was causing the code to crash.
+                if mapdata[i][j] != None:
+                    color = MapColors[mapdata[i][j]]
+                else:
+                    L.error("mapdata[%d][%d] is None" % (i,j))
 
-      # Send message and receive reply.
-      if game.is_alive(b):
-        L.debug("Bot %d is alive" % b)
-        L.debug("Sending message to bot %d:\n%s" % (b, msg))
-        moves = bot.Receive(msg)
-        L.debug("Received moves from bot %d:\n%s" % (b, '\n'.join(moves)))
-        bot_moves.append((b, moves))
+                # Update rectangle colors.
+                gui.map.itemconfigure(gui.mapr[i][j], fill=color)
 
-    # Clear the old turn's game state now that it's been sent to the
-    # player. NOTE: The game parameters get sent on turn 0, but the
-    # initial world state does not get sent until turn 1. Therefore do
-    # not reset game state until after turn 0.
-    if self.turn > 0:
-      game.start_turn()
+    # Renders a colored map to represent arbitrary floating point data
+    # values. "Red" is hotter (larger), "Blue" is cooler (smaller).
+    def RenderHeatMap(self, mapdata, minval=None, maxval=None):
 
-    # Have the game process the cached moves.
-    for b,moves in bot_moves:
-      valid, ignored, invalid = game.do_moves(b, moves)
-      if len(ignored) > 0:
-        L.error("bot %d gave ignored orders:\n%s" % 
-                (b,'\n'.join(ignored)))
-        if STRICT_MODE == True:
-          raise Exception("One or more bots gave bad orders")
-      if len(invalid) > 0:
-        L.error("bot %d gave invalid orders:\n%s" % 
-                (b,'\n'.join(invalid)))
-        if STRICT_MODE == True:
-          raise Exception("One or more bots gave bad orders")
+        # Concatenates mapdata into a single list.
+        vals = list()
+        for i in range(self.game.height):
+            for j in range(self.game.width):
+                vals.append(float(mapdata[i][j]))
 
-    L.debug("Game should execute orders:\n%s" % 
-              str(game.orders))
+        # Get min and max value if not specified.
+        if minval == None:
+            minval = min(vals)
+        if maxval == None:
+            maxval = max(vals)
 
-  # Get game options from command line. Largely copied from the
-  # original Ants code.
-  def GetOptions(self, argv):
-    usage ="Usage: %prog --run [options]"
-    parser = OptionParser(usage=usage)
+        # Compute the colormap, blue going into red in 32 distinct
+        # hexadecimal colors.
+        hexvals = '0123456789abcdef'
+        cols = list()
+        for i in range(16):
+            cols.append('#' + hexvals[i] + hexvals[i] + hexvals[-(i+1)])
+        for i in range(16):
+            cols.append('#f' + hexvals[-(i+1)] + '0')
 
-    # I added this as a required option so that the dual-use behavior
-    # (see GreedyBot.py) works as expected.
-    parser.add_option("--run", dest="runlocal",
-                      action="store_true",
-                      help="Required to run the bot locally")
-                      
-    # map to be played
-    # number of players is determined by the map file
-    parser.add_option("-m", "--map_file", dest="map",
-                      default="debug_map.map",
-                      help="Name of the map file")
-  
-    # maximum number of turns that the game will be played
-    parser.add_option("-t", "--turns", dest="turns",
-                      default=1000, type="int",
-                      help="Number of turns in the game")
-    parser.add_option("--turntime", dest="turntime",
-                      default=1000, type="int",
-                      help="Amount of time to give each bot, in milliseconds")
-    parser.add_option("--loadtime", dest="loadtime",
-                      default=3000, type="int",
-                      help="Amount of time to give for load, in milliseconds")
-    parser.add_option("--player_seed", dest="player_seed",
-                      default=0, type="int",
-                      help="Player seed for the random number generator")
-    parser.add_option("--engine_seed", dest="engine_seed",
-                      default=None, type="int",
-                      help="Engine seed for the random number generator")
+        for i in range(self.game.height):
+            for j in range(self.game.width):
+
+                # Truncate extreme values.
+                c = float(mapdata[i][j])
+                if c < minval: 
+                    c = minval;
+                if c > maxval:
+                    c = maxval;
+
+                # Determine which of the 32 colors this square will use.
+                colidx = int(floor( ((c-minval)/(maxval-minval) * 31) ))
+                if colidx > 32 or colidx < 0:
+                    L.error("WTF? colidx = " + str(colidx) + ", c = " + str(c) 
+                                    + ", minval = " + str(minval) + ", maxval = " 
+                                    + str(maxval))
+                gui.map.itemconfigure(gui.mapr[i][j], 
+                                                            fill=cols[colidx])
+
+    # Tk callback event for quitting.
+    def QuitGameCallback(self, event):
+        L.info("Abort! Quitting...")
+        sys.exit()
+
+    # Tk callback event for stepping through to the next turn.
+    def RunTurnCallback(self, event):
+        try:
+            self.RunTurn()
+        except Exception as e:
+            traceback.print_exc(file=sys.stderr)
+            sys.exit()
+
+    # Steps through 1/2 of a turn.
+    def RunTurn(self):
+        game = self.game    # shortcut
+
+        if self.turn == game.turns or game.game_over():
+            L.info("Game finished at turn %d" % self.turn);
+            L.info("Game over? " + str(game.game_over()))
+            gui.quit()
+            game.finish_game()
+            return 0
     
-    # ants specific game options
-    parser.add_option("--attack", dest="attack",
-                      default="power",
-                      help="Attack method to use for engine. (closest, power, support, damage)")
-    parser.add_option("--food", dest="food",
-                      default="symmetric",
-                      help="Food spawning method. (none, random, sections, symmetric)")
-    parser.add_option("--viewradius2", dest="viewradius2",
-                      default=55, type="int",
-                      help="Vision radius of ants squared")
-    parser.add_option("--spawnradius2", dest="spawnradius2",
-                      default=1, type="int",
-                      help="Spawn radius of ants squared")
-    parser.add_option("--attackradius2", dest="attackradius2",
-                      default=5, type="int",
-                      help="Attack radius of ants squared")
+        # Initial turn is a special case. 
+        if self.turn == 0:
+            L.debug("Starting game....")
+            game.start_game()
 
-    (opts, args) = parser.parse_args(argv)
-    if opts.runlocal != True:
-      parser.print_help()
-      return None
+            # For debugging, keep track of what water was revealed to which
+            # bot (this was a very annoying bug).
+            self.water = [game.revealed_water[b] for b in range(game.num_players)]
 
-    # Check for missing map
-    if opts.map is None or not os.path.exists(opts.map):
-      sys.stderr.write("Error: Map %s not found\n" % opts.map)
-      parser.print_help()
-      return None
+            # Send starting game state to bots, but don't do anything with
+            # their response.
+            self.SendAndRcvMessages() 
 
-    # Load map data
-    game_options = {
-        "map": opts.map,
-        "attack": opts.attack,
-        "food": opts.food,
-        "viewradius2": opts.viewradius2,
-        "attackradius2": opts.attackradius2,
-        "spawnradius2": opts.spawnradius2,
-        "loadtime": opts.loadtime,
-        "turntime": opts.turntime,
-        "turns": opts.turns,
-        "player_seed": opts.player_seed,
-        "engine_seed": opts.engine_seed }
+            # Turn 0 is over. Now 1/2 phase turns can begin.
+            self.turn += 1
 
-    with open(opts.map, 'r') as map_file:
-      game_options['map'] = map_file.read()
+        if self.turn_phase == 0: # Movement phase, beginning of turn
+            L.debug("Starting turn: %d" % self.turn)
 
-    return game_options
+            # Send game state from last turn to bots and get messages.
+            self.SendAndRcvMessages()        
+            game.FinishTurnMoves()
+
+            self.turn_phase = 1
+
+        else: # Combat, food, etc. resolution phase
+            
+            # Finish game turn logic.
+            game.FinishTurnResolve()
+
+            # Again, keep track of revealed water for bugfinding.
+            for p in range(len(self.bots)):
+                self.water[p] = self.water[p] + game.revealed_water[p]
+            
+            # Reset turn phase and advance turn.
+            self.turn_phase = 0 
+            self.turn += 1
+
+            # Sanity check: make sure that water that is visible actually
+            # was revealed to the player.
+            for p in range(len(self.bots)):
+                for row, squares in enumerate(game.vision[p]):
+                    for col, visible in enumerate(squares):
+                        if game.map[row][col] == WATER and visible:
+                            if (row,col) not in self.water[p]:
+                                L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
+
+        # Update the map regardless of turn phase. TODO Perspective is hard coded.
+        self.RenderMap(game.get_perspective(0));
+        
+      
+
+    # Sends game states to bots, receives messages, and clears game
+    # state for the next turn.
+    def SendAndRcvMessages(self):
+        game = self.game
+
+        bot_moves = []    # Movement cache
+
+        for b, bot in self.bots:
+            msg = None
+
+            # Get message to send to player depending on turn.
+            if self.turn == 0:
+                msg = game.get_player_start(b) + 'ready\n'
+            else:
+                msg = game.get_player_state(b) + 'go\n'
+
+            # Send message and receive reply.
+            if game.is_alive(b):
+                #L.debug("Bot %d is alive" % b)
+                #L.debug("Sending message to bot %d:\n%s" % (b, msg))
+                moves = bot.Receive(msg)
+                #L.debug("Received moves from bot %d:\n%s" % (b, '\n'.join(moves)))
+                bot_moves.append((b, moves))
+
+        # Clear the old turn's game state now that it's been sent to the
+        # player. NOTE: The game parameters get sent on turn 0, but the
+        # initial world state does not get sent until turn 1. Therefore do
+        # not reset game state until after turn 0.
+        if self.turn > 0:
+            game.start_turn()
+
+        # Have the game process the cached moves.
+        for b,moves in bot_moves:
+            valid, ignored, invalid = game.do_moves(b, moves)
+            if len(ignored) > 0:
+                L.error("bot %d gave ignored orders:\n%s" % 
+                                (b,'\n'.join(ignored)))
+                if STRICT_MODE == True:
+                    raise Exception("One or more bots gave bad orders")
+            if len(invalid) > 0:
+                L.error("bot %d gave invalid orders:\n%s" % 
+                                (b,'\n'.join(invalid)))
+                if STRICT_MODE == True:
+                    raise Exception("One or more bots gave bad orders")
+
+        L.debug("Game should execute orders:\n%s" % 
+                            str(game.orders))
+
+    # Get game options from command line. Largely copied from the
+    # original Ants code.
+    def GetOptions(self, argv):
+        usage ="Usage: %prog --run [options]"
+        parser = OptionParser(usage=usage)
+
+        # I added this as a required option so that the dual-use behavior
+        # (see GreedyBot.py) works as expected.
+        parser.add_option("--run", dest="runlocal",
+                                            action="store_true",
+                                            help="Required to run the bot locally")
+        # whether to step through every half-turn or just let it run
+        parser.add_option("--step-through", dest="step_through",
+                                            default=False, type="int",
+                                            help="Hit enter to step through turns")
+                                            
+        # map to be played
+        # number of players is determined by the map file
+        parser.add_option("-m", "--map_file", dest="map",
+                                            default="debug_map.map",
+                                            help="Name of the map file")
+    
+        # maximum number of turns that the game will be played
+        parser.add_option("-t", "--turns", dest="turns",
+                                            default=1000, type="int",
+                                            help="Number of turns in the game")
+        parser.add_option("--turntime", dest="turntime",
+                                            default=1000, type="int",
+                                            help="Amount of time to give each bot, in milliseconds")
+        parser.add_option("--loadtime", dest="loadtime",
+                                            default=3000, type="int",
+                                            help="Amount of time to give for load, in milliseconds")
+        parser.add_option("--player_seed", dest="player_seed",
+                                            default=0, type="int",
+                                            help="Player seed for the random number generator")
+        parser.add_option("--engine_seed", dest="engine_seed",
+                                            default=None, type="int",
+                                            help="Engine seed for the random number generator")
+        
+        # ants specific game options
+        parser.add_option("--attack", dest="attack",
+                                            default="power",
+                                            help="Attack method to use for engine. (closest, power, support, damage)")
+        parser.add_option("--food", dest="food",
+                                            default="symmetric",
+                                            help="Food spawning method. (none, random, sections, symmetric)")
+        parser.add_option("--viewradius2", dest="viewradius2",
+                                            default=55, type="int",
+                                            help="Vision radius of ants squared")
+        parser.add_option("--spawnradius2", dest="spawnradius2",
+                                            default=1, type="int",
+                                            help="Spawn radius of ants squared")
+        parser.add_option("--attackradius2", dest="attackradius2",
+                                            default=5, type="int",
+                                            help="Attack radius of ants squared")
+
+        (opts, args) = parser.parse_args(argv)
+        if opts.runlocal != True:
+            parser.print_help()
+            return None
+
+        # Check for missing map
+        if opts.map is None or not os.path.exists(opts.map):
+            sys.stderr.write("Error: Map %s not found\n" % opts.map)
+            parser.print_help()
+            return None
+
+        # Load map data
+        game_options = {
+                "map": opts.map,
+                "attack": opts.attack,
+                "food": opts.food,
+                "viewradius2": opts.viewradius2,
+                "attackradius2": opts.attackradius2,
+                "spawnradius2": opts.spawnradius2,
+                "loadtime": opts.loadtime,
+                "turntime": opts.turntime,
+                "turns": opts.turns,
+                "player_seed": opts.player_seed,
+                "engine_seed": opts.engine_seed,
+                "step_through": opts.step_through }
+
+        with open(opts.map, 'r') as map_file:
+            game_options['map'] = map_file.read()
+
+        return game_options
 
 
-  
+    
