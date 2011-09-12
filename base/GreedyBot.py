@@ -69,7 +69,7 @@ if __name__ == '__main__':
         psyco.full()
     except ImportError:
         pass
-
+#
     try:
         if len(sys.argv) > 1: # Run LocalEngine version
             engine = LocalEngine()
@@ -80,6 +80,6 @@ if __name__ == '__main__':
         else: # Run as stand-alone process
             bot = GreedyBot(AntWorld())
             bot.Run()
-
+#
     except KeyboardInterrupt:
         print('ctrl-c, leaving ...')

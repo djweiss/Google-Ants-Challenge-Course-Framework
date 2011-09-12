@@ -6,8 +6,8 @@
 # LocalEngine. They also automatically keep the AntWorld state updated
 # based on messages from the server/engine.
 
-from worldstate import Ant,AntStatus,AntWorld
-import traceback,sys
+from worldstate import Ant, AntStatus, AntWorld
+import traceback, sys
 
 class AntsBot:
     def __init__(self, world):
@@ -29,7 +29,6 @@ class AntsBot:
             return self.world.FinishTurn()
 
         elif lines[-1].lower() == 'go':
-
             self.world.Update('\n'.join(lines[:-1]))
             self.DoTurn()
             return self.world.FinishTurn()
@@ -55,7 +54,6 @@ class AntsBot:
                     self.world.Update(map_data)
                     self.DoTurn()
                     self.world.FinishTurn()
-
                     map_data = ''
                 else:
                     map_data += current_line + '\n'
@@ -65,4 +63,3 @@ class AntsBot:
                 traceback.print_exc(file=sys.stderr)
                 break
                     
-

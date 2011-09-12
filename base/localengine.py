@@ -21,10 +21,10 @@
 # log files is required.
 #
 # TODO:
-#    - Show graphically which ants will attack each other in combat phase
-#    - Display the turn in the title window
-#    - Map is currently hard-coded to show player 0's perspective; fix this
-#    - Better window geometry layout so they're not all on top of each other.
+#        - Show graphically which ants will attack each other in combat phase
+#        - Display the turn in the title window
+#        - Map is currently hard-coded to show player 0's perspective; fix this
+#        - Better window geometry layout so they're not all on top of each other.
 
 import sys,traceback
 
@@ -32,6 +32,7 @@ from worldstate import AntStatus,Ant,AntWorld
 from antsbot import *
 from antsgame import * # Importing * is required to get all of the
                                               # constants from antsgame.py
+
 from logutil import *
 from Tkinter import *
 from optparse import OptionParser
@@ -48,7 +49,7 @@ import tkFont
 STRICT_MODE = False
 
 global gui
-gui = Frame()  # This is the Tk master object from which all GUI
+gui = Frame()    # This is the Tk master object from which all GUI
                               # elements will spawn
 
 # A lookup table for visualizing the map
@@ -98,14 +99,6 @@ class StepAnts(Ants):
         self.update_vision()
         self.update_revealed()
 
-# A Tkinter window class that provides a text-based log view. It
-# provides an emit() function that we use to override a standard
-# LogHandler object in order to use the nice Python logging
-# facilities. This way, the window is just another logging
-# destination, and emit() handles all the formatting and display.
-#
-# NOTE: On Mac, trying to set the Font causes Python to crash, so
-# don't mess with the Font.
 class LogWindow(Toplevel):
 
     # Init takes a botnum parameter to set the title.
@@ -199,6 +192,7 @@ class LocalEngine:
     # Returns a new AntWorld with engine set properly for use by client bots.
     def GetWorld(self):
         return AntWorld(engine=self)
+            
 
     # Adds a given AntsBot object to the list of bots playing the game,
     # and creates a log window for the bot.
@@ -228,20 +222,37 @@ class LocalEngine:
             L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
 
         self.game = StepAnts(self.game_opts)
+#        self.game = MazeAnts(self.game_opts)
+
         L.debug("Game created.");
 
         self.turn = 0
         self.InitMap()
-        self.RunTurn()
-        gui.mainloop()
+        gui.master.lift()
+        if self.game_opts['step_through']:
+            gui.mainloop()
+        else:
+            while True:  
+                gui.update()
+                if self.RunTurn() == 0:
+                    break
+        0
+        print "*"*20
+        print "Game Summary"
+        print "*"*20
+        for b in self.bots:
+            print "bot %d: %.02f points" % (b[0],float(self.game.score[b[0]]))
+        print "-"*20
+#        gui.mainloop()
+      
 
 
     # Draws the rectangles on the Map GUI window that will be used to
     # represent game state.
     def InitMap(self):
 
-        mx = 500 # Map window dimensions
-        my = 500
+        mx = self.game.width*10 # Map window dimensions
+        my = self.game.height*10
         rx = mx / (self.game.width+2) # Rectangle dimensions
         ry = my / (self.game.height+2)
 
@@ -348,7 +359,7 @@ class LocalEngine:
             L.info("Game over? " + str(game.game_over()))
             gui.quit()
             game.finish_game()
-            return
+            return 0
     
         # Initial turn is a special case. 
         if self.turn == 0:
@@ -370,7 +381,7 @@ class LocalEngine:
             L.debug("Starting turn: %d" % self.turn)
 
             # Send game state from last turn to bots and get messages.
-            self.SendAndRcvMessages()    
+            self.SendAndRcvMessages()        
             game.FinishTurnMoves()
 
             self.turn_phase = 1
@@ -399,6 +410,8 @@ class LocalEngine:
 
         # Update the map regardless of turn phase. TODO Perspective is hard coded.
         self.RenderMap(game.get_perspective(0));
+        
+      
 
     # Sends game states to bots, receives messages, and clears game
     # state for the next turn.
@@ -459,6 +472,10 @@ class LocalEngine:
         parser.add_option("--run", dest="runlocal",
                                             action="store_true",
                                             help="Required to run the bot locally")
+        # whether to step through every half-turn or just let it run
+        parser.add_option("--step-through", dest="step_through",
+                                            default=False, type="int",
+                                            help="Hit enter to step through turns")
                                             
         # map to be played
         # number of players is determined by the map file
@@ -523,7 +540,8 @@ class LocalEngine:
                 "turntime": opts.turntime,
                 "turns": opts.turns,
                 "player_seed": opts.player_seed,
-                "engine_seed": opts.engine_seed }
+                "engine_seed": opts.engine_seed,
+                "step_through": opts.step_through }
 
         with open(opts.map, 'r') as map_file:
             game_options['map'] = map_file.read()
