@@ -4,23 +4,23 @@
 #
 # Sets up a default global logger named L for shorthand, which logs a
 # nice format to the console.
-       
+              
 import os,sys,logging
 
 # initialize logging
 def GetDefaultLogger(name="default", level=logging.DEBUG,handler=None):
-  logger = logging.getLogger(name)
-  logger.setLevel(level)
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
 
-  if handler == None:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-      '[%(levelname)s] ' +
-      '%(filename)s:%(lineno)d:%(funcName)s: - %(message)s')
-    handler.setFormatter(formatter)
+    if handler == None:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '[%(levelname)s] ' +
+            '%(filename)s:%(lineno)d:%(funcName)s: - %(message)s')
+        handler.setFormatter(formatter)
 
-  logger.addHandler(handler)
-  return logger
+    logger.addHandler(handler)
+    return logger
 
 global L
 L = GetDefaultLogger(level=logging.DEBUG)  
