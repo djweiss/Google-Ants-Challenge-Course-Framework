@@ -475,7 +475,7 @@ class LocalEngine:
                                             help="Required to run the bot locally")
         # whether to step through every half-turn or just let it run
         parser.add_option("--step-through", dest="step_through",
-                                            default=False, type="int",
+                                            default=True, type="int",
                                             help="Hit enter to step through turns")
                                             
         # map to be played

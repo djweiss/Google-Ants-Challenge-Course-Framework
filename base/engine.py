@@ -8,8 +8,6 @@ import sys
 import json
 import io
 
-from sandbox import get_sandbox
-
 class HeadTail(object):
     'Capture first part of file write and discard remainder'
     def __init__(self, file, max_capture=510):
