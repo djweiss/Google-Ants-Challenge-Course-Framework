@@ -20,9 +20,11 @@
 # TODO: AntsWorld should keep track of UNSEEN map elements, which are
 # currently unused.
 
+import random
 import sys
 import traceback
-import random
+
+from logutil import *
 
 # Constants used to interpret mapdata. TODO: A more elegant solution.
 MY_ANT = 0
@@ -35,26 +37,21 @@ UNSEEN = -5
 MAX_INT=99999999
 MAP_RENDER = 'abcdefghijklmnopqrstuvwxyz?!%*.'
 
-from logutil import *
-
 # Converts N-S-E-W directions into X-Y vectors.
 AIM = {'n': (-1, 0),
               'e': (0, 1),
               's': (1, 0),
               'w': (0, -1)}
 
-# Enum type to represent persistent ant status.
 class AntStatus:
+    '''Enum type to represent persistent ant status.'''
     UNKNOWN = 0
     ALIVE = 1
     DEAD = 2
     ToString = ("UNKNOWN", "ALIVE", "DEAD")
 
-# The persisent Ant class. It stores a location, direction, persistent
-# id number for identification, and status. By setting the direction,
-# the AntsWorld will automatically execute the corresponding orders at
-# the end of the turn.
-class Ant:
+class Ant(object):
+    '''The persisent Ant class. It stores a location, direction, persistent id number for identification, and status. By setting the direction, the AntsWorld will automatically execute the corresponding orders at the end of the turn.'''
     def __init__(self, world, pos, ant_id):
         self.ant_id = ant_id
         self.location = pos    
@@ -62,43 +59,27 @@ class Ant:
         self.status = AntStatus.ALIVE
         self.world = world
 
-    def Distance(self, targ): 
-        return self.world.Distance(self.location, targ)
+    def distance(self, targ): 
+        '''Get the distance to a target location.'''
+        return self.world.distance(self.location, targ)
 
-    # Returns a sorted list (dist, (x,y)) from an initial list of (x,y)
-    # positions, sorted in ascending order of distance to this ant.
-    def SortByDistance(self, targ_list): 
-        dists = [ (self.Distance(targ), targ) 
+    def sort_by_distance(self, targ_list): 
+        '''Returns a sorted list (dist, (x,y)) from an initial list of (x,y) positions, sorted in ascending order of distance to this ant.'''
+        dists = [ (self.distance(targ), targ) 
                             for targ in targ_list ]
 
         dists.sort(key=(lambda x: x[0]))
         return dists
 
-    # Get the possible directions that move this ant closer to this
-    # target. Since ants can't move diagonally, there may be multiple
-    # directions.
-    def Directions(self, targ):
-        if targ == None:
+    def toward(self, targ):
+        '''Get the possible directions that move this ant closer to this target. Since ants can't move diagonally, there may be multiple directions.'''
+        if targ is None:
             return []
         else:
-            return self.world.Directions(self.location, targ)
+            return self.world.directions(self.location, targ)
 
-    def FindClosestFood(self):
-        dists = self.SortByDistance(self.world.food_list)
-        if len(dists) > 0:
-            return dists[0][1]
-        else: 
-            return None
-
-    def FindClosestEnemy(self):
-        dists = self.SortByDistance(self.world.enemy_dict.keys())
-        if len(dists) > 0:
-            return dists[0][1]
-        else:
-            return None
-
-# The AntWorld class. No AntsBot should ever be without one.
-class AntWorld():
+class AntWorld(object):
+    '''The AntWorld class. No AntsBot should ever be without one.'''
     def __init__(self, engine=None):
 
         # Useful game state parameters.
@@ -108,17 +89,17 @@ class AntWorld():
         
         # Lookup tables for enemies, friendly ants, and food.
         self.enemy_dict = {}
-        self.food_list = []
+        self.food = []
         self.dead_dict = {}
         self.ant_lookup = {}
-        self.ant_list = []
+        self.ants = []
 
         # Default logger is the global logger (see logutil.py).
         self.L = L
         self.engine = engine
 
-    def SetupParameters(self, data):
-        # Parses raw data to determine game settings.
+    def _setup_parameters(self, data):
+        '''Parse raw data to determine game settings.'''
         for line in data.split('\n'):
             line = line.strip().lower()
             if len(line) > 0:
@@ -154,16 +135,16 @@ class AntWorld():
                 self.ant_lookup[(i,j)] = -1
         self.L.debug("World state initialized")
 
-    # Updates a world state based on data from the engine/server.
-    def Update(self, data):
+    # _updates a world state based on data from the engine/server.
+    def _update(self, data):
         self.L.debug("Updating world state:")
 
         # Clear map of last turn's friendly ants.
-        for row, col in [ant.location for ant in self.ant_list]:
+        for row, col in [ant.location for ant in self.ants]:
             self.map[row][col] = LAND
 
         # Clear map of last turn's enemy ants, food, and bodies.
-        clear_these = (self.food_list + 
+        clear_these = (self.food + 
                                       self.enemy_dict.keys() + 
                                       self.dead_dict.keys())
         if len(clear_these) > 0:
@@ -171,7 +152,7 @@ class AntWorld():
                 self.map[row][col] = LAND
 
         # Reset food, enemy, and dead body locations.
-        self.food_list = []
+        self.food = []
         self.enemy_dict = {}
         self.dead_dict = {}
 
@@ -192,7 +173,7 @@ class AntWorld():
                     col = int(tokens[2])
                     if tokens[0] == 'a': # ant found
 
-                        # Update map with owner of ant.
+                        # _update map with owner of ant.
                         owner = int(tokens[3])
                         self.map[row][col] = owner
 
@@ -205,7 +186,7 @@ class AntWorld():
 
                     elif tokens[0] == 'f': # food found
                         self.map[row][col] = FOOD
-                        self.food_list.append((row, col))
+                        self.food.append((row, col))
                     elif tokens[0] == 'w': # water found
                         self.map[row][col] = WATER
                         self.L.debug("RCV WATER at %d,%d" % (row,col))
@@ -214,7 +195,7 @@ class AntWorld():
                         self.dead_dict[(row,col)] = True
 
         # Track friendly living ants.
-        for ant in [a for a in self.ant_list 
+        for ant in [a for a in self.ants 
                                 if a.status == AntStatus.ALIVE]:
             self.L.debug("tracking ant: %d - %s" % (ant.ant_id, str(ant.location)))
 
@@ -228,13 +209,13 @@ class AntWorld():
             # turn's direction.
             next_pos = ant.location
             if ant.direction != None:
-                proj_pos = self.NextPosition(ant.location, ant.direction)
+                proj_pos = self.next_position(ant.location, ant.direction)
                 self.L.debug("projected position: %s --> %s" % 
                                 (ant.direction, str(proj_pos)))
 
                 # Note: if the ordered direction was not passable, it will not
                 # have moved.
-                if self.Passable(proj_pos):
+                if self.passable(proj_pos):
                     next_pos = proj_pos
                 else:
                     self.L.debug("projection NOT passable")
@@ -266,38 +247,37 @@ class AntWorld():
                 self.L.error("Duplicate ant found at (%d,%d)" %
                                   (pos[0], pos[1]))
             else:
-                ant_id = len(self.ant_list)
+                ant_id = len(self.ants)
                 self.L.debug("New ant %d found at (%d,%d)" % 
                                   (ant_id, pos[0], pos[1]))
-                self.ant_list.append(Ant(self, pos, ant_id))
+                self.ants.append(Ant(self, pos, ant_id))
                 self.ant_lookup[pos] = ant_id
 
         # Print out a status to the log window. First dead ants, then
         # unknown, and then alive.
-        for ant in [a for a in self.ant_list 
+        for ant in [a for a in self.ants 
                                 if a.status == AntStatus.DEAD]:
             self.L.debug("ant %d status: %s, %s" % 
                             (ant.ant_id, str(ant.location),
                             AntStatus.ToString[ant.status]))
-        for ant in [a for a in self.ant_list 
+        for ant in [a for a in self.ants 
                                 if a.status == AntStatus.UNKNOWN]:
             self.L.warning("ant %d status: %s, %s" % 
                             (ant.ant_id, str(ant.location),
                             AntStatus.ToString[ant.status]))
-        for ant in [a for a in self.ant_list 
+        for ant in [a for a in self.ants 
                                 if a.status == AntStatus.ALIVE]:
             self.L.info("ant %d status: %s, %s" % 
                             (ant.ant_id, str(ant.location),
                             AntStatus.ToString[ant.status]))
 
-    # Finish the turn by sending out the orders to the game engine or
-    # server.
-    def FinishTurn(self):
+    def _finish_turn(self):
+        '''Finish the turn by sending out the orders to the game engine or server.'''
 
         # Only send orders for alive, moving ants.
         orders = ['o %d %d %s' % 
                             (a.location[0], a.location[1], a.direction)
-                            for a in self.ant_list if a.direction != None and
+                            for a in self.ants if a.direction != None and
                             a.status == AntStatus.ALIVE]
 
         if self.engine == None: # Should send to stdout
@@ -308,31 +288,25 @@ class AntWorld():
         else:
             return orders # No 'go' is necessary here
 
-    def Food(self):
-        return self.food_list
-
-    def Ants(self):
-        return self.ant_list
-    
-    def Enemies(self):
+    @property
+    def enemies(self):
         return self.enemy_dict.keys()
 
-    def Passable(self, loc):
+    def passable(self, loc):
         return self.map[loc[0]][loc[1]] > WATER
     
-    def Unoccupied(self, loc):
+    def unoccupied(self, loc):
         row,col = loc
         return self.map[row][col] in (LAND, DEAD)
 
-    # Get the next position occupied by an ant moving in a specific
-    # direction. (Sphere world makes this non-trivial).
-    def NextPosition(self, location, direction):
+    def next_position(self, location, direction):
+        '''Get the next position occupied by an ant moving in a specific direction. (Sphere world makes this non-trivial).'''
         row, col = location
         d_row, d_col = AIM[direction]
         return ((row + d_row) % self.height, (col + d_col) % self.width)
 
-    # Distance between two locations on sphere world.
-    def Distance(self, loc1, loc2):
+    def distance(self, loc1, loc2):
+        '''Distance between two locations on sphere world.'''
         row1,col1 = loc1
         row2,col2 = loc2
         row1 = row1 % self.height
@@ -343,12 +317,13 @@ class AntWorld():
         d_row = min(abs(row1 - row2), self.height - abs(row1 - row2))
         return d_row + d_col
 
-    # Get directions that move closer to loc2 from loc1. This horrible
-    # function was copied from the distribution code.
-    def Directions(self, loc1, loc2):
+    def directions(self, loc1, loc2):
+        '''Get directions that move closer to loc2 from loc1.
+        
+        This horrible function was copied from the distribution code.'''
         d = []
-        row1,col1 = loc1
-        row2,col2 = loc2
+        row1, col1 = loc1
+        row2, col2 = loc2
 
         row1 = row1 % self.height
         row2 = row2 % self.height
@@ -377,7 +352,7 @@ class AntWorld():
 
         return d
     
-    def RenderTextMap(self, map=None):
+    def _render_text_map(self, map=None):
         tmp = ''
         if map == None:
             map = self.map
