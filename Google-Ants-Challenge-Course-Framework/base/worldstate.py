@@ -77,6 +77,36 @@ class Ant(object):
             return []
         else:
             return self.world.directions(self.location, targ)
+        
+    def closest_food(self):
+        '''Get the closest food, or None if no food is in sight.'''
+        dists = self.sort_by_distance(self.world.food)
+        if dists:
+            return dists[0][1]
+        else:
+            return None
+
+    def closest_enemy(self):
+        '''Get the closest enemy, or None if no enemy is in sight.'''
+        dists = self.sort_by_distance(self.world.enemies)
+        if dists:
+            return dists[0][1]
+        else:
+            return None
+
+    def get_passable_direction(self, dirs):
+        '''Filter a list of NSEW directions to remove directions that are not passable from an ant's current position. Returns the FIRST direction that is passable.'''
+        if dirs is None:
+            return None
+
+        for d in dirs:
+            l = self.world.next_position(self.location, d)
+            if self.world.passable(l) and self.world.unoccupied(l):
+                self.world.L.debug("ant %d: move %s: %s->%s is not blocked" %
+                                (self.ant_id, d, str(self.location),str(l)))
+                return d
+
+        return None
 
 class AntWorld(object):
     '''The AntWorld class. No AntsBot should ever be without one.'''
