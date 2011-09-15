@@ -8,7 +8,6 @@ import sys
 
 from antsbot import AntsBot
 from greedybot import GreedyBot
-from localengine import LocalEngine
 from worldstate import AIM, AntStatus, AntWorld
 
 class ExploreDFA:
@@ -104,6 +103,7 @@ if __name__ == '__main__':
 
     try:
         if len(sys.argv) > 1: # Run LocalEngine version
+            from localengine import LocalEngine
             engine = LocalEngine()
             engine.AddBot(DFABot(engine.GetWorld()))
             engine.AddBot(GreedyBot(engine.GetWorld()))
