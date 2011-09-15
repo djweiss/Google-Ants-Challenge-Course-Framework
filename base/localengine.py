@@ -219,8 +219,9 @@ class LocalEngine:
 
         L.debug("Starting local game...")
         L.debug("Using bots: ")
-        for b,bot in self.bots:
-            L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
+        bot_colors = ["Red", "Blue"]
+        for index, (b, bot) in enumerate(self.bots):
+            L.debug("\tbot %d (%s): %s" % (b, bot_colors[index], str(bot.__class__)))
 
         self.game = StepAnts(self.game_opts)
 #        self.game = MazeAnts(self.game_opts)
