@@ -346,8 +346,10 @@ class Ants(Game):
             Enemy identifiers are changed to reflect the order in
                which the player first saw them.
         """
-        if player is None:
+        if player is None or len(self.player_ants(player)) == 0:
             return self.map
+        
+        
 
         v = self.vision[player]
         result = []
