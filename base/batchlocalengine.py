@@ -5,23 +5,12 @@
 # This batch version of LocalEngine will run a game silently and simply return bot scores.
 # It can also provide a bit more feedback optionally.
 
-import sys
 import traceback
-import operator
-import string
-import os
-
 from optparse import OptionParser
-from math import sqrt,floor
-from collections import deque, defaultdict
-from fractions import Fraction
-
-from logutil import *
-from game import Game
-from worldstate import AntStatus,Ant,AntWorld
+from worldstate import AntWorld
 from antsbot import *
-from antsgame import * # Importing * is required to get all of the
-                                              # constants from antsgame.py
+from antsgame import *
+from logutil import *
 
 # Whether or not to crash the entire game upon invalid moves
 STRICT_MODE = False
@@ -53,6 +42,73 @@ class StepAnts(Ants):
     def __init__(self, options=None):
         Ants.__init__(self, options)
       
+    def Reset(self, map_text): 
+        map_data = self.parse_map(map_text)
+
+        self.turn = 0
+        self.num_players = map_data['num_players']
+
+        self.current_ants = {} # ants that are currently alive
+        self.killed_ants = []  # ants which were killed this turn
+        self.all_ants = []     # all ants that have been created
+
+        self.all_food = []     # all food created
+        self.current_food = {} # food currently in game
+
+        # initalise scores
+        self.score = [Fraction(0,1)]*self.num_players
+        self.score_history = [[s] for s in self.score]
+        self.bonus = [0 for s in self.score]
+
+        # initialise size
+        self.height, self.width = map_data['size']
+        self.land_area = self.height*self.width - len(map_data['water'])
+
+        # initialise map
+        self.map = [[LAND]*self.width for i in range(self.height)]
+
+        # initialise water
+        for row, col in map_data['water']:
+            self.map[row][col] = WATER
+
+        # initalise ants
+        for owner, locs in map_data['ants'].items():
+            for loc in locs:
+                self.add_ant(loc, owner)
+
+        # initalise food
+        for loc in map_data['food']:
+            self.add_food(loc)
+
+        # track which food has been seen by each player
+        self.seen_food = [set() for i in range(self.num_players)]
+
+        # used to remember where the ants started
+        self.initial_ant_list = sorted(self.current_ants.values(), key=operator.attrgetter('owner'))
+        self.initial_access_map = self.access_map()
+
+        # cache used by neighbourhood_offsets() to determine nearby squares
+        self.offsets_cache = {}
+
+        # used to track dead players, ants may still exist, but order are not processed
+        self.killed = [False for i in range(self.num_players)]
+
+        # used to give a different ordering of players to each player
+        #   initialised to ensure that each player thinks they are player 0
+        self.switch = [[None]*self.num_players + range(-5,0) for i in range(self.num_players)]
+        for i in range(self.num_players):
+            self.switch[i][i] = 0
+        # used to track water and land already reveal to player
+        # ants and food will reset spots so a second land entry will be sent
+        self.revealed = [[[False for col in range(self.width)]
+                          for row in range(self.height)]
+                         for p in range(self.num_players)]
+        # used to track what a player can see
+        self.init_vision()
+
+        # the engine may kill players before the game starts and this is needed to prevent errors
+        self.orders = [[] for i in range(self.num_players)]
+
     def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
         # Determine players alive at the start of the turn.  Only these
         # players will be able to score this turn.
@@ -86,6 +142,10 @@ class FakeLogger:
     def debug(self, text):
         None
         # do nothing
+    def warning(self, text):
+        None
+        # do nothing
+                
     def info(self, text):
         None
         # do nothing
@@ -104,7 +164,8 @@ class BatchLocalEngine:
                                          # to the console.
         L.setLevel(level)
         self.turn_phase = 0
-
+        self.map_list = []
+        
     # Returns a new AntWorld with engine set properly for use by client bots.
     def GetWorld(self):
         return AntWorld(engine=self)
@@ -133,10 +194,11 @@ class BatchLocalEngine:
         self.game = StepAnts(self.game_opts)
 
         L.debug("Game created.");
-        
+
     # Runs the game until completion. Parses command line options.
     def Run(self):
-
+        
+        self.turn_phase = 0
         self.turn = 0
         while True:  
             if self.RunTurn() == 0:
@@ -205,12 +267,12 @@ class BatchLocalEngine:
 
             # Sanity check: make sure that water that is visible actually
             # was revealed to the player.
-            for p in range(len(self.bots)):
-                for row, squares in enumerate(game.vision[p]):
-                    for col, visible in enumerate(squares): 
-                        if game.map[row][col] == WATER and visible:
-                            if (row,col) not in self.water[p]:
-                                L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
+#            for p in range(len(self.bots)):
+#                for row, squares in enumerate(game.vision[p]):
+#                    for col, visible in enumerate(squares): 
+#                        if game.map[row][col] == WATER and visible:
+#                            if (row,col) not in self.water[p]:
+#                                L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
 
         # Update the map regardless of turn phase. 
         #self.RenderMap(game.get_perspective(0));

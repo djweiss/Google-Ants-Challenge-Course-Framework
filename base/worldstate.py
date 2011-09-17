@@ -128,6 +128,8 @@ class AntWorld(object):
         # Default logger is the global logger (see logutil.py).
         self.L = L
         self.engine = engine
+        
+        self.stateless = True
 
     def _setup_parameters(self, data):
         '''Parse raw data to determine game settings.'''
@@ -192,6 +194,10 @@ class AntWorld(object):
         # should dead, otherwise we have no idea what happened to it.
         check_ants = {}
 
+        if self.stateless:
+            self.ants = []
+            self.ants_lookup = {}
+            
         # Now parse the data.
         for line in data.split('\n'):
             line = line.strip().lower()
@@ -210,8 +216,16 @@ class AntWorld(object):
 
                         # Update internal lookup dictionaries.
                         if owner == MY_ANT:
-                            self.L.debug("RCV MY ANT at %s" % str((row,col)))
-                            check_ants[(row, col)] = owner
+                            if self.stateless:
+                                pos = (row, col)
+                                ant_id = len(self.ants)
+                                self.L.debug("New ant %d found at (%d,%d)" % 
+                                             (ant_id, pos[0], pos[1]))
+                                self.ants.append(Ant(self, pos, ant_id))
+                                self.ant_lookup[pos] = ant_id
+                            else:
+                                self.L.debug("RCV MY ANT at %s" % str((row,col)))
+                                check_ants[(row, col)] = owner
                         else:
                             self.enemy_dict[(row, col)] = owner
 
@@ -224,7 +238,11 @@ class AntWorld(object):
                     elif tokens[0] == 'd': # dead body found
                         self.map[row][col] = DEAD
                         self.dead_dict[(row,col)] = True
-
+        
+        if not self.stateless:
+            self._track_friendlies(check_ants)
+    
+    def _track_friendlies(self, check_ants):
         # Track friendly living ants.
         for ant in [a for a in self.ants 
                                 if a.status == AntStatus.ALIVE]:
@@ -286,21 +304,21 @@ class AntWorld(object):
 
         # Print out a status to the log window. First dead ants, then
         # unknown, and then alive.
-        for ant in [a for a in self.ants 
-                                if a.status == AntStatus.DEAD]:
-            self.L.debug("ant %d status: %s, %s" % 
-                            (ant.ant_id, str(ant.location),
-                            AntStatus.ToString[ant.status]))
-        for ant in [a for a in self.ants 
-                                if a.status == AntStatus.UNKNOWN]:
-            self.L.warning("ant %d status: %s, %s" % 
-                            (ant.ant_id, str(ant.location),
-                            AntStatus.ToString[ant.status]))
-        for ant in [a for a in self.ants 
-                                if a.status == AntStatus.ALIVE]:
-            self.L.info("ant %d status: %s, %s" % 
-                            (ant.ant_id, str(ant.location),
-                            AntStatus.ToString[ant.status]))
+#        for ant in [a for a in self.ants 
+#                                if a.status == AntStatus.DEAD]:
+#            self.L.debug("ant %d status: %s, %s" % 
+#                            (ant.ant_id, str(ant.location),
+#                            AntStatus.ToString[ant.status]))
+#        for ant in [a for a in self.ants 
+#                                if a.status == AntStatus.UNKNOWN]:
+#            self.L.warning("ant %d status: %s, %s" % 
+#                            (ant.ant_id, str(ant.location),
+#                            AntStatus.ToString[ant.status]))
+#        for ant in [a for a in self.ants 
+#                                if a.status == AntStatus.ALIVE]:
+#            self.L.info("ant %d status: %s, %s" % 
+#                            (ant.ant_id, str(ant.location),
+#                            AntStatus.ToString[ant.status]))
 
     def _finish_turn(self):
         '''Finish the turn by sending out the orders to the game engine or server.'''

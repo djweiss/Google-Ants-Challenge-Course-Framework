@@ -103,11 +103,22 @@ if __name__ == '__main__':
 
     try:
         if len(sys.argv) > 1: # Run LocalEngine version
-            from localengine import LocalEngine
-            engine = LocalEngine()
-            engine.AddBot(DFABot(engine.GetWorld()))
+            from batchlocalengine import BatchLocalEngine
+            from mapgen import SymmetricMap
+
+            engine = BatchLocalEngine()
             engine.AddBot(GreedyBot(engine.GetWorld()))
-            engine.Run(sys.argv)
+            engine.AddBot(GreedyBot(engine.GetWorld()))
+            engine.PrepareGame(sys.argv)
+
+            # Run 100 random games.
+            for i in range(0, 100):
+                random_map = SymmetricMap(min_dim=40, max_dim=40)
+                random_map.random_walk_map()                
+                engine.game.Reset(random_map.map_text())
+                engine.Run()
+                print [float(r) for r in engine.game.score], "turn", engine.turn
+                 
             
         else: # Run as stand-alone process
             bot = DFABot(AntWorld())
