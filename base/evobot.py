@@ -12,24 +12,35 @@ from greedybot import GreedyBot
 from worldstate import AIM, AntStatus, AntWorld, LAND, FOOD, WATER, MY_ANT
 import json
 
-class JSONParseError(Exception):
-    def __init__(self, caller, json_txt, fieldname):
-        self.json_txt = json_txt
-        self.fieldname = fieldname
-        self.caller = str(caller.__class__)
-    def __str__(self):
-        return "Error parsing %s:\nJSON txt = '%s'\nBad field '%s'" %  \
-            (self.caller, self.json_txt, self.fieldname)
-
-class Feature:
-    @classmethod
-    def get_feature_class(cls, name):
-        if name == 'SquareFeature':
-            return SquareFeature
+class FeatureExtractor:
+    def __init__(self, input_dict):
+        if input_dict['_type'] == 'SquareFeature':
+            self.__class__ = SquareFeature
         else:
-            raise Exception("Invalid feature class") 
+            raise Exception("Invalid feature class %s" + input_dict['_type'])
+         
+        self.init_from_dict(input_dict)
+
+    def __str__(self):
+        return str(self.__class__)
         
-class SquareFeature: 
+    def to_dict(self):
+        raise NotImplementedError
+    
+    def init_from_dict(self):
+        raise NotImplementedError
+    
+    def get_range(self):
+        raise NotImplementedError
+    
+    def get_value(self, world, state, loc):
+        raise NotImplementedError
+
+class SquareFeature(FeatureExtractor):
+    value_lookup = {WATER: 0, FOOD: 1, MY_ANT: 2, LAND: 3}
+    ENEMY_ANT = 4
+    OTHER = 5 
+    
     def __init__(self, offset):
         self.offset = offset
         
@@ -38,15 +49,9 @@ class SquareFeature:
 
     def to_dict(self):
         return {'_type': 'SquareFeature', 'offset': self.offset}
-    
-    def to_json(self):
-        return json.dumps(self.to_dict())
 
-    @classmethod
-    def from_dict(cls, x):
-        if not x['_type'] == 'SquareFeature':
-            raise JSONParseError(self, json.dumps(x), '_type')
-        return SquareFeature(x['offset'])
+    def init_from_dict(self, input_dict):
+        self.offset = input_dict['offset']
 
     def get_value(self, world, state, loc):
         row = loc[0] + self.offset[0]
@@ -61,18 +66,13 @@ class SquareFeature:
         elif col >= world.width:
             col = world.width - col
             
-        value = world.map[row][col]    
-        if value == WATER:
-            return 0
-        if value == FOOD:
-            return 1
-        if value == MY_ANT:
-            return 2
-        if value == LAND:
-            return 3
+        value = world.map[row][col]
+        if value in SquareFeature.value_lookup:
+            return SquareFeature.value_lookup[value]
+            
         if value > MY_ANT:
-            return 4
-        return 5
+            return SquareFeature.ENEMY_ANT
+        return SquareFeature.OTHER
     
     def get_range(self):
         return range(0, 6)
@@ -83,66 +83,52 @@ class DecisionNode:
         self.leaves = leaves
         self.is_terminal = is_terminal
             
-class DecisionTree:
-    def __init__(self, world, depth_limit):
-        self.world = world
-        self.offset_range = [-8, -4, -2, -1, 1, 2, 4, 8]
+class RandomDecisionTree:
+    def __init__(self, depth_limit):
         self.root = self.build_random_tree(depth_limit=depth_limit)
                
-    def get_decision(self, loc, state):
+    def get_decision(self, world, state, loc):
         node = self.root
 
         # recursively traverse tree until terminal node is reached
         while not node.is_terminal:
-            value = node.feature.get_value(self.world, state, loc)
-            self.world.L.debug("feature: %s at pos %s = %d" % (str(node.feature), str(loc), value))
+            value = node.feature.get_value(world, state, loc)
+            world.L.debug("feature: %s at pos %s = %d" % (str(node.feature), str(loc), value))
             node = node.leaves[value]
 
         # get final value         
-        value = node.feature.get_value(self.world, state, loc)
-        self.world.L.debug("feature: %s at pos %s = %d --> %s" % (str(node.feature), str(loc), value, node.leaves[value]))   
+        value = node.feature.get_value(world, state, loc)
+        world.L.debug("feature: %s at pos %s = %d --> %s" % (str(node.feature), str(loc), value, node.leaves[value]))   
         return node.leaves[value]
     
     def build_random_tree(self, depth=0, depth_limit=3):
-        # get random offset
-        offset = list()
-        
-        offset.append(random.choice(self.offset_range))
-        offset.append(random.choice(self.offset_range))
-        feature = SquareFeature(offset)
-        leaves = []
-        for value in feature.get_range():
-            if depth < depth_limit:
-                leaves.append(self.build_random_tree(depth+1, depth_limit))
-            else:
-                leaves.append(random.choice(['n','s','e','w']))
+        # get random offset feature
+        offset_range = [-8, -4, -2, -1, 1, 2, 4, 8]
+        feature = SquareFeature([random.choice(offset_range), random.choice(offset_range)])
+        # build leaves
+        if depth < depth_limit:
+            leaves = [self.build_random_tree(depth+1, depth_limit) for i in feature.get_range()]
+        else:
+            leaves = [random.choice(['n','s','e','w']) for i in feature.get_range()]
+                         
         return DecisionNode(feature, leaves, depth == depth_limit)
             
     def to_dict(self, node=None):
         if node == None:
             node = self.root
-
-        x = {}
-        x['_type'] = 'DecisionNode'
-        x['is_terminal'] = node.is_terminal
-        x['feature'] = node.feature.to_dict()
+        d = {'_type': 'DecisionNode', 
+             'is_terminal' : node.is_terminal,
+             'feature' : node.feature.to_dict()}
         if node.is_terminal:
-            x['leaves'] = node.leaves
+            d['leaves'] = node.leaves
         else:
-            x['leaves'] = [self.to_dict(leaf) for leaf in node.leaves]
-
-        return x
+            d['leaves'] = [self.to_dict(leaf) for leaf in node.leaves]
+        return d
     
     def from_dict(self, input):     
-    
         assert(input['_type'] == 'DecisionNode')
-        
-        # Get feature
-        feature_class = Feature.get_feature_class(input['feature']['_type'])
-        feature = feature_class.from_dict(input['feature'])
-        
-        # Get leaves
-        if input['is_terminal']:
+        feature = FeatureExtractor(input['feature'])  # Get feature
+        if input['is_terminal']:  # Get leaves
             leaves = input['leaves']
         else:
             leaves = [self.from_dict(leaf) for leaf in input['leaves']]
@@ -152,14 +138,8 @@ class DecisionTree:
 class EvoBot(AntsBot):
     def __init__(self, world):
         self.world = world
-        self.tree = DecisionTree(self.world, depth_limit=2)
-        #tree2 = DecisionTree(self.world, depth_limit=1)
-        #tree2.from_json(self.tree.to_json())
-        #print json.dumps(self.tree.to_dict())
-        x = json.loads(json.dumps(self.tree.to_dict()))
-        self.tree.root = self.tree.from_dict(x)
-        print self.tree.to_dict() 
-        
+        self.tree = RandomDecisionTree(depth_limit=2)
+
     # Main logic
     def do_turn(self):
         # Run the routine for each living ant independently.
@@ -226,7 +206,7 @@ if __name__ == '__main__':
                 pop_size = 10
                 trees = []
                 for i in range(0, pop_size):
-                    trees.append(DecisionTree(evo_bot.world, 3))
+                    trees.append(RandomDecisionTree(3))
                     
                 engine.AddBot(evo_bot)
                 engine.AddBot(GreedyBot(engine.GetWorld()))
