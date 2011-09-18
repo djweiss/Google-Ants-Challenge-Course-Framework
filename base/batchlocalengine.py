@@ -11,6 +11,7 @@ from worldstate import AntWorld
 from antsbot import *
 from antsgame import *
 from logutil import *
+import time
 
 # Whether or not to crash the entire game upon invalid moves
 STRICT_MODE = False
@@ -158,7 +159,8 @@ class BatchLocalEngine:
 
     def __init__(self, game=None, level=logging.CRITICAL):
         self.bots = []
-
+        self.bot_time = []
+        
         L = logging.getLogger("default") # Use the same logger as the
                                          # default, so the log also goes
                                          # to the console.
@@ -179,7 +181,8 @@ class BatchLocalEngine:
         bot.world.L = FakeLogger()
         # Add to internal list for playing the game.
         self.bots.append((b, bot))
-
+        self.bot_time.append(0)
+        
     def PrepareGame(self, argv):
         # Parse command line options and fail if unsuccessful.
         self.game_opts = self.GetOptions(argv)
@@ -286,6 +289,7 @@ class BatchLocalEngine:
 
         bot_moves = []  # Movement cache
 
+        
         for b, bot in self.bots:
             msg = None
 
@@ -299,7 +303,9 @@ class BatchLocalEngine:
             if game.is_alive(b):
                 L.debug("Bot %d is alive" % b)
                 L.debug("Sending message to bot %d:\n%s" % (b, msg))
+                start_time = time.time()
                 moves = bot._receive(msg)
+                self.bot_time[b] += (time.time() - start_time)
                 L.debug("Received moves from bot %d:\n%s" % (b, '\n'.join(moves)))
                 bot_moves.append((b, moves))
 

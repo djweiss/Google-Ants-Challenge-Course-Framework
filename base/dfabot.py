@@ -5,7 +5,7 @@
 # An example deterministic finite automaton (DFA) bot.
 
 import sys
-
+import time
 from antsbot import AntsBot
 from greedybot import GreedyBot
 from worldstate import AIM, AntStatus, AntWorld
@@ -110,15 +110,24 @@ if __name__ == '__main__':
             engine.AddBot(GreedyBot(engine.GetWorld()))
             engine.AddBot(GreedyBot(engine.GetWorld()))
             engine.PrepareGame(sys.argv)
-
+            engine.game.efficient_update = True
+            
+            num_games = 10
             # Run 100 random games.
-            for i in range(0, 100):
-                random_map = SymmetricMap(min_dim=40, max_dim=40)
+            start_time = time.time()
+            for i in range(0, num_games):
+                random_map = SymmetricMap(min_dim=60, max_dim=60)
                 random_map.random_walk_map()                
                 engine.game.Reset(random_map.map_text())
                 engine.Run()
                 print [float(r) for r in engine.game.score], "turn", engine.turn
-                 
+            elapsed = time.time() - start_time
+            sum_bots = 0
+            print "Time summary: %.2f s total elapsed = %.2f s/game " % (elapsed, elapsed/num_games)
+            for b,bot in engine.bots:
+                sum_bots += engine.bot_time[b]
+                print "\tbot %d %s: %.5f s = %.2f%%" % (b, str(bot.__class__), engine.bot_time[b], engine.bot_time[b]/elapsed*100)     
+            print "\tengine: %.5f s = %.2f%%" % (elapsed-sum_bots, (elapsed-sum_bots)/elapsed*100)
             
         else: # Run as stand-alone process
             bot = DFABot(AntWorld())

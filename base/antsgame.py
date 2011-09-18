@@ -8,6 +8,7 @@ import operator
 import string
 from game import Game
 from sys import maxint
+from logutil import L
 
 ANTS = 0
 LAND = -1
@@ -129,6 +130,10 @@ class Ants(Game):
         self.revealed = [[[False for col in range(self.width)]
                           for row in range(self.height)]
                          for p in range(self.num_players)]
+        
+        # try efficient update vs inefficient update.        
+        self.efficient_update = False
+
         # used to track what a player can see
         self.init_vision()
 
@@ -257,6 +262,12 @@ class Ants(Game):
 
     def update_vision(self):
         """ Incrementally updates the vision data """
+        
+        if self.efficient_update:
+            self.revealed_water = []
+            for player in range(self.num_players):
+                self.revealed_water.append([])
+                    
         for ant in self.current_ants.values():
             if not ant.orders:
                 # new ant
@@ -282,7 +293,37 @@ class Ants(Game):
         vision = self.vision[ant.owner]
         for v_row, v_col in offsets:
             # offsets are such that there is never an IndexError
-            vision[a_row+v_row][a_col+v_col] += delta
+            
+            row = a_row+v_row
+            col = a_col+v_col
+            
+            # if we are ACTIVATING this vision
+            if delta > 0 and self.efficient_update and vision[row][col] == 0:
+
+                value = self.map[row][col]
+                if row < 0:
+                    row = self.height + row
+                if col < 0:
+                    col = self.width + col
+                    
+                # add any food that is visible to seen_food
+                if value == FOOD:
+                    self.seen_food[ant.owner].add(self.current_food[(row,col)])
+    
+                # if this player encounters a new enemy then
+                #   assign the enemy the next index
+                if value >= ANTS and self.switch[ant.owner][value] == None:
+                    self.switch[ant.owner][value] = self.num_players - self.switch[ant.owner].count(None)
+    
+                # mark square as revealed and determine if we see any
+                #   new water
+                if not self.revealed[ant.owner][row][col]:
+                    self.revealed[ant.owner][row][col] = True
+                    if value == WATER:
+                        self.revealed_water[ant.owner].append((row,col))
+
+            # make update
+            vision[row][col] += delta
 
     def update_revealed(self):
         """ Make updates to state based on what each player can see
@@ -293,7 +334,9 @@ class Ants(Game):
             Update self.seen_food
             Update self.removed_food
         """
-        self.revealed_water = []
+        if not self.efficient_update:
+            self.revealed_water = []
+                    
         self.removed_food = []
         for player in range(self.num_players):
             water = []
@@ -311,31 +354,37 @@ class Ants(Game):
                     food.append(seen.loc)
             self.removed_food.append(food)
 
-            for row, squares in enumerate(self.vision[player]):
-                for col, visible in enumerate(squares):
-                    if not visible:
-                        continue
+            # old method of updating
+            if not self.efficient_update:
+                
+                for row, squares in enumerate(self.vision[player]):
+                    for col, visible in enumerate(squares):
+                        if not visible:
+                            continue
+    
+                        value = self.map[row][col]
+    
+                        # add any food that is visible to seen_food
+                        if value == FOOD:
+                            self.seen_food[player].add(self.current_food[(row,col)])
+    
+                        # if this player encounters a new enemy then
+                        #   assign the enemy the next index
+                        if value >= ANTS and switch[value] == None:
+                            switch[value] = self.num_players - switch.count(None)
+    
+                        # mark square as revealed and determine if we see any
+                        #   new water
+                        if not revealed[row][col]:
+                            revealed[row][col] = True
+                            if value == WATER:
+                                water.append((row,col))
+    
+                # update the water which was revealed this turn
+                self.revealed_water.append(water)
 
-                    value = self.map[row][col]
-
-                    # add any food that is visible to seen_food
-                    if value == FOOD:
-                        self.seen_food[player].add(self.current_food[(row,col)])
-
-                    # if this player encounters a new enemy then
-                    #   assign the enemy the next index
-                    if value >= ANTS and switch[value] == None:
-                        switch[value] = self.num_players - switch.count(None)
-
-                    # mark square as revealed and determine if we see any
-                    #   new water
-                    if not revealed[row][col]:
-                        revealed[row][col] = True
-                        if value == WATER:
-                            water.append((row,col))
-
-            # update the water which was revealed this turn
-            self.revealed_water.append(water)
+        for water in self.revealed_water:
+            L.debug("water: %s" % str(water))
 
     def get_perspective(self, player=None):
         """ Get the map from the perspective of the given player
