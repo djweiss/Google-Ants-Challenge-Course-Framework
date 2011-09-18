@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # Created: September 2011
-# Author: Jennifer Gillenwater
+# Author: David Weiss
 #
-# An example deterministic finite automaton (DFA) bot.
+# Template for genetic algorithm evolution bot.
 
 import sys
 import time
@@ -145,7 +145,7 @@ class EvoBot(AntsBot):
         # Run the routine for each living ant independently.
         for ant in self.world.ants:
             if ant.status == AntStatus.ALIVE:
-                ant.direction = self.tree.get_decision(ant.location, None)
+                ant.direction = self.tree.get_decision(self.world, None, ant.location)
 
 def EvaluateTrees(engine, evo_bot, trees, num_games):
     played_games = 0
@@ -195,7 +195,7 @@ if __name__ == '__main__':
     try:
         if len(sys.argv) > 1: # Run LocalEngine version
             
-            batchMode = False            
+            batchMode = True            
             if batchMode:                
                 from batchlocalengine import BatchLocalEngine
                 from mapgen import SymmetricMap
