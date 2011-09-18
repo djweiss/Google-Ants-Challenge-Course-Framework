@@ -116,7 +116,7 @@ if __name__ == '__main__':
             # Run 100 random games.
             start_time = time.time()
             for i in range(0, num_games):
-                random_map = SymmetricMap(min_dim=60, max_dim=60)
+                random_map = SymmetricMap(min_dim=30, max_dim=30)
                 random_map.random_walk_map()                
                 engine.game.Reset(random_map.map_text())
                 engine.Run()

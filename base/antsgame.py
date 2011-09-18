@@ -86,7 +86,8 @@ class Ants(Game):
         self.score = [Fraction(0,1)]*self.num_players
         self.score_history = [[s] for s in self.score]
         self.bonus = [0 for s in self.score]
-
+        self.add_bonus = False
+        
         # initialise size
         self.height, self.width = map_data['size']
         self.land_area = self.height*self.width - len(map_data['water'])
@@ -298,7 +299,7 @@ class Ants(Game):
             col = a_col+v_col
             
             # if we are ACTIVATING this vision
-            if delta > 0 and self.efficient_update and vision[row][col] == 0:
+            if self.efficient_update and vision[row][col] == 0 and delta > 0:
 
                 value = self.map[row][col]
                 if row < 0:
@@ -1204,7 +1205,8 @@ class Ants(Game):
                 # enemy ants (player ants already received point when spawned)
                 + len([ant for ant in self.current_ants.values() if ant.owner != player])
             )
-            self.score[player] += food_bonus
+            if self.add_bonus:
+                self.score[player] += food_bonus
             # separate bonus from score history
             self.bonus[player] = food_bonus
 
