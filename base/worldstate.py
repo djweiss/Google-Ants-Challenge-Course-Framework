@@ -352,6 +352,10 @@ class AntWorld(object):
         '''Get directions that move closer to loc2 from loc1.
         
         This horrible function was copied from the distribution code.'''
+        
+        if loc1 == loc2:
+            return [None]
+        
         d = []
         row1, col1 = loc1
         row2, col2 = loc2
