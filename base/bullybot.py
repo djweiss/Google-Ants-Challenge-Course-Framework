@@ -70,7 +70,7 @@ class BullyBot(AntsBot):
         Returns a boolean vector for each location if the locations are in attack range of the enemy.
         Might be helpful.
         '''
-        return [self.world.engine.game.distance(loc,enemy) < self.world.attackradius2 for loc in locs]
+        return [self.world.euclidean_distance2(loc,enemy) <= self.world.attackradius2 for loc in locs]
     
     def is_goal_state(self,world,locs,enemy):
         '''
