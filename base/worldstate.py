@@ -336,8 +336,8 @@ class AntWorld(object):
         d_row, d_col = AIM[direction]
         return ((row + d_row) % self.height, (col + d_col) % self.width)
 
-    def distance(self, loc1, loc2):
-        '''Distance between two locations on sphere world.'''
+    def manhattan_distance(self,loc1,loc2):
+        '''Grid distance between two locations on sphere world.'''
         row1,col1 = loc1
         row2,col2 = loc2
         row1 = row1 % self.height
@@ -347,6 +347,20 @@ class AntWorld(object):
         d_col = min(abs(col1 - col2), self.width - abs(col1 - col2))
         d_row = min(abs(row1 - row2), self.height - abs(row1 - row2))
         return d_row + d_col
+    
+    def euclidean_distance2(self,x,y):
+        ''' Euclidean distance between x and y squared '''
+        d_row = abs(x[0] - y[0])
+        d_row = min(d_row, self.height - d_row)
+        d_col = abs(x[1] - y[1])
+        d_col = min(d_col, self.width - d_col)
+        return d_row**2 + d_col**2
+        
+    
+    def distance(self, loc1, loc2):
+        '''Distance between two locations on sphere world.
+        I don't like the ambiguous naming, but for backwards compatibility, keeping this'''
+        return self.manhattan_distance(loc1,loc2)
 
     def directions(self, loc1, loc2):
         '''Get directions that move closer to loc2 from loc1.
