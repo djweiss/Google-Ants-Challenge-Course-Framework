@@ -256,8 +256,18 @@ class LocalEngine:
     # represent game state.
     def InitMap(self):
 
-        mx = self.game.width*20 # Map window dimensions
-        my = self.game.height*20
+        screen_width = gui.winfo_screenwidth()
+        screen_height = gui.winfo_screenheight() 
+        mindim = min(screen_width,screen_height)
+
+        # scaled so that a 50x50 game takes up 75% of the screen's dims
+        scaling = 0.75*mindim / 50.0
+        mx = self.game.width*scaling # Map window dimensions
+        my = self.game.height*scaling
+        
+        mx = min(mx,0.9*mindim)
+        my = min(my,0.9*mindim)
+        
         rx = mx / (self.game.width+2) # Rectangle dimensions
         ry = my / (self.game.height+2)
 
