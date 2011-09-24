@@ -46,6 +46,7 @@ from antsbot import *
 from antsgame import * # Importing * is required to get all of the
                                               # constants from antsgame.py
 
+GAMELOG_BOTNUM = -1 #hacky hack hackerson
 # Whether or not to crash the entire game upon invalid moves
 STRICT_MODE = False
 
@@ -105,34 +106,16 @@ class StepAnts(Ants):
         self.update_vision()
         self.update_revealed()
 
-class LogWindow(Toplevel):
+class LogWindow():#Toplevel):
 
     # Init takes a botnum parameter to set the title.
     def __init__(self, master=None, botnum=0): 
-        Toplevel.__init__(self, master)
-
-        # Setup default window geometry. The format is:
-        # "<width>x<height>+<x-offset>+<y-offset>" or something like that.
-        self.geometry("550x400+%d+%d" % 
-                                    (50*botnum,50*botnum))
-        self.title("Bot %d log" % botnum)
-        self.lift() # Move on top of map.
-
-        # Make resizable. (Copied from tutorial).
-        self.frame = Frame(self)
-        self.rowconfigure(0,weight=1)
-        self.columnconfigure(0,weight=1)
-        self.frame.rowconfigure(0,weight=1)
-        self.frame.columnconfigure(0,weight=1)
-        self.frame.grid()
-
-        # Set up the textbox for the log.  
-        #
-        # TODO: "takefocus=0" means you're not supposed to be able to
-        # enter text as the user, but for some reason it doesn't seem to
-        # work.
-        self.textbox = Text(self.frame,takefocus=0, width=72,height=20, bd=0)
-        self.textbox.grid()
+        #POTENTIALLY TODO HERE: little wrapper frame with a title
+        self.textbox = Text(gui,takefocus=0, width=72,height=20, bd=0)
+        if botnum != GAMELOG_BOTNUM:
+          self.textbox.grid(row=botnum, column=1)
+        else:
+          self.textbox.grid(row=1, column=0)
         
         # Setup font colors for the difference logging levels through text
         # tags. The emit() function will tag the text appropriately so
@@ -145,9 +128,9 @@ class LogWindow(Toplevel):
         self.textbox.tag_config("header", underline=1)
 
         # Set up the scrollbar. (Copied from tutorial).
-        self.scrollY = Scrollbar(self.frame, orient=VERTICAL, command=self.textbox.yview)
-        self.scrollY.grid(row=0, column=1, sticky=N+S)
-        self.textbox["yscrollcommand"] = self.scrollY.set
+        #self.scrollY = Scrollbar(self.frame, orient=VERTICAL, command=self.textbox.yview)
+        #self.scrollY.grid(row=0, column=1, sticky=N+S)
+        #self.textbox["yscrollcommand"] = self.scrollY.set
 
         # Make a logHandler object and redirect it's emission to me.
         self.log_handler = logging.StreamHandler()
@@ -178,7 +161,7 @@ class LocalEngine:
         gui.grid()
         gui.master.geometry("100x100+50+50")
         gui.master.title("World View")
-        gui.master.resizable(False,False)
+        gui.master.resizable(True,True)
         gui.master.lift()
 
         # Set up callbacks for user input.
@@ -186,8 +169,9 @@ class LocalEngine:
         gui.bind_all("<KeyPress-q>", self.QuitGameCallback)
 
         # Create a logging window for the main server.
-        self.logwindow = LogWindow(gui,botnum=5) # TODO: Make botnum optional
-        self.logwindow.title("Engine Log")
+        #HACK! but w/e 
+        self.logwindow = LogWindow(gui,botnum=GAMELOG_BOTNUM) 
+        #self.logwindow.title("Engine Log")
         L = logging.getLogger("default") # Use the same logger as the
                                                                           # default, so the log also goes
                                                                           # to the console.
@@ -249,6 +233,7 @@ class LocalEngine:
             print "bot %d (%s): %.02f points" % (b[0],MapColors[b[0]],float(self.game.score[b[0]]))
         print "-"*20
 #        gui.mainloop()
+    
       
 
 
@@ -263,7 +248,7 @@ class LocalEngine:
 
         # We use a Tk Canvas object for drawing the rectangles.
         gui.map = Canvas(gui, width=mx,height=my, bg="#AAA")
-        gui.map.grid()
+        gui.map.grid(row=0, column=0)
         gui.mapr = list()
         for i in range(self.game.height):
             gui.mapr.append([])
@@ -279,7 +264,7 @@ class LocalEngine:
         
         # Update the geometry of the master window to reflect the desired
         # map window size.
-        gui.master.geometry("%dx%d+0+20" % (mx,my))
+        gui.master.geometry("%dx%d+0+0" % (mx * 2.6,my * 2))
 
     # Renders a map based on the mapdata array, where mapdata takes on
     # one of the states from the MapColors array.
@@ -552,6 +537,3 @@ class LocalEngine:
             game_options['map'] = map_file.read()
 
         return game_options
-
-
-    
