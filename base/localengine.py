@@ -54,14 +54,19 @@ gui = Frame()    # This is the Tk master object from which all GUI
                               # elements will spawn
 
 # A lookup table for visualizing the map
-MapColors = ['#f00', # ant color 1
-                          '#00f', # ant color 2
-                          '#000', # unseen
-                          '#fee', # conflict(?)
-                          '#88f', # water
-                          '#fff', # food
-                          '#552', # land
-                          ]
+MapColors = [
+            'red', # ant color 1
+            'blue', # ant color 2
+            'green', # ant color 3
+            'orange', # ant color 4
+            'magenta', # ant color 5
+            'cyan', # ant color 6
+            '#000', # unseen
+            '#fee', # conflict(?)
+            '#88f', # water
+            '#fff', # food
+            '#666', # land
+]
 
 # A slightly modified version of the original Ants game from
 # antsgame.py: this breaks up the finish_turn() method of the original
@@ -219,12 +224,10 @@ class LocalEngine:
 
         L.debug("Starting local game...")
         L.debug("Using bots: ")
-        bot_colors = ["Red", "Blue"]
-        for index, (b, bot) in enumerate(self.bots):
-            L.debug("\tbot %d (%s): %s" % (b, bot_colors[index], str(bot.__class__)))
+        for b,bot in self.bots:
+            L.debug("\tbot %d (%s): %s" % (b, MapColors[b],str(bot.__class__)))
 
         self.game = StepAnts(self.game_opts)
-#        self.game = MazeAnts(self.game_opts)
 
         L.debug("Game created.");
 
@@ -238,12 +241,12 @@ class LocalEngine:
                 gui.update()
                 if self.RunTurn() == 0:
                     break
-        0
+        
         print "*"*20
         print "Game Summary"
         print "*"*20
         for b in self.bots:
-            print "bot %d: %.02f points" % (b[0],float(self.game.score[b[0]]))
+            print "bot %d (%s): %.02f points" % (b[0],MapColors[b[0]],float(self.game.score[b[0]]))
         print "-"*20
 #        gui.mainloop()
       
@@ -253,8 +256,8 @@ class LocalEngine:
     # represent game state.
     def InitMap(self):
 
-        mx = self.game.width*10 # Map window dimensions
-        my = self.game.height*10
+        mx = self.game.width*20 # Map window dimensions
+        my = self.game.height*20
         rx = mx / (self.game.width+2) # Rectangle dimensions
         ry = my / (self.game.height+2)
 
@@ -288,7 +291,7 @@ class LocalEngine:
                 # TODO For some reason, sometimes the mapdata gets assigned
                 # None and this was causing the code to crash.
                 if mapdata[i][j] != None:
-                    color = MapColors[mapdata[i][j]]
+                   color = MapColors[mapdata[i][j]]
                 else:
                     L.error("mapdata[%d][%d] is None" % (i,j))
 
@@ -405,12 +408,12 @@ class LocalEngine:
             # was revealed to the player.
             for p in range(len(self.bots)):
                 for row, squares in enumerate(game.vision[p]):
-                    for col, visible in enumerate(squares):
+                    for col, visible in enumerate(squares): 
                         if game.map[row][col] == WATER and visible:
                             if (row,col) not in self.water[p]:
                                 L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
 
-        # Update the map regardless of turn phase. TODO Perspective is hard coded.
+        # Update the map regardless of turn phase. 
         self.RenderMap(game.get_perspective(0));
         
       

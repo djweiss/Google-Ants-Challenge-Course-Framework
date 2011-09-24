@@ -41,7 +41,8 @@ MAP_RENDER = 'abcdefghijklmnopqrstuvwxyz?!%*.'
 AIM = {'n': (-1, 0),
               'e': (0, 1),
               's': (1, 0),
-              'w': (0, -1)}
+              'w': (0, -1),
+              'halt': (0,0)}
 
 class AntStatus:
     '''Enum type to represent persistent ant status.'''
