@@ -46,6 +46,7 @@ from antsbot import *
 from antsgame import * # Importing * is required to get all of the
                                               # constants from antsgame.py
 
+PLAY_SPEED_MS = 250 #adjust as needed
 GAMELOG_BOTNUM = -1 #hacky hack hackerson
 # Whether or not to crash the entire game upon invalid moves
 STRICT_MODE = False
@@ -115,7 +116,7 @@ class LogWindow():#Toplevel):
         if botnum != GAMELOG_BOTNUM:
           self.textbox.grid(row=botnum, column=1)
         else:
-          self.textbox.grid(row=2, column=0)
+          self.textbox.grid(row=1, column=0)
         
         # Setup font colors for the difference logging levels through text
         # tags. The emit() function will tag the text appropriately so
@@ -240,7 +241,14 @@ class LocalEngine:
 
     def InitControls(self):
         """ Gives you play/pause buttons a la normal debugging"""
-
+        self.controls_frame = Frame(self.map_frame)
+        step = Button(self.controls_frame, text='Step', \
+                      command=self.RunTurnCallback)
+        step.grid(row=0, column=0)
+        playpause = Button(self.controls_frame, text='Play/Pause', \
+                           command=self.PlayPauseGameCallback)
+        playpause.grid(row=0, column=1)
+        self.controls_frame.grid(row=1, column=0)
 
     # Draws the rectangles on the Map GUI window that will be used to
     # represent game state.
@@ -252,8 +260,11 @@ class LocalEngine:
         ry = my / (self.game.height+2)
 
         # We use a Tk Canvas object for drawing the rectangles.
-        gui.map = Canvas(gui, width=mx,height=my, bg="#AAA")
+        self.map_frame = Frame(gui)
+        gui.map = Canvas(self.map_frame, width=mx,height=my, bg="#AAA")
         gui.map.grid(row=0, column=0)
+        self.map_frame.grid(row=0, column=0)
+
         gui.mapr = list()
         for i in range(self.game.height):
             gui.mapr.append([])
@@ -338,12 +349,22 @@ class LocalEngine:
         sys.exit()
 
     # Tk callback event for stepping through to the next turn.
-    def RunTurnCallback(self, event):
+    def RunTurnCallback(self, event=None):
         try:
             self.RunTurn()
         except Exception as e:
             traceback.print_exc(file=sys.stderr)
             sys.exit()
+
+    play_is_on = False #arguably, poor form
+    def PlayPauseGameCallback(self, event=None):
+        self.play_is_on = not self.play_is_on
+        self.PlayUntilStopped()
+        
+    def PlayUntilStopped(self):
+        if self.play_is_on:
+            self.RunTurnCallback()
+            gui.after(PLAY_SPEED_MS, self.PlayUntilStopped)
 
     # Steps through 1/2 of a turn.
     def RunTurn(self):
