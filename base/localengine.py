@@ -115,7 +115,7 @@ class LogWindow():#Toplevel):
         if botnum != GAMELOG_BOTNUM:
           self.textbox.grid(row=botnum, column=1)
         else:
-          self.textbox.grid(row=1, column=0)
+          self.textbox.grid(row=2, column=0)
         
         # Setup font colors for the difference logging levels through text
         # tags. The emit() function will tag the text appropriately so
@@ -217,6 +217,7 @@ class LocalEngine:
 
         self.turn = 0
         self.InitMap()
+        self.InitControls()
         gui.master.lift()
         if self.game_opts['step_through']:
             gui.mainloop()
@@ -235,6 +236,10 @@ class LocalEngine:
 #        gui.mainloop()
     
       
+
+
+    def InitControls(self):
+        """ Gives you play/pause buttons a la normal debugging"""
 
 
     # Draws the rectangles on the Map GUI window that will be used to
