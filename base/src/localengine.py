@@ -223,7 +223,7 @@ class LocalEngine:
         if self.game_opts['step_through']:
             gui.mainloop()
         else:
-            while True:  
+            while 1: 
                 gui.update()
                 if self.RunTurn() == 0:
                     break
@@ -266,9 +266,9 @@ class LocalEngine:
         self.map_frame.grid(row=0, column=0)
 
         gui.mapr = list()
-        for i in range(self.game.height):
+        for i in xrange(self.game.height):
             gui.mapr.append([])
-            for j in range(self.game.width):
+            for j in xrange(self.game.width):
 
                 # Get rectangle coordinates and draw the rectangle.
                 x0 = rx*(j+1)
