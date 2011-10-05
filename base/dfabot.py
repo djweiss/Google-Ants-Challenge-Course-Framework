@@ -4,11 +4,8 @@
 #
 # An example deterministic finite automaton (DFA) bot.
 
-import sys
-import time
-from antsbot import AntsBot
-from greedybot import GreedyBot
-from worldstate import AIM, AntStatus, AntWorld
+from src.antsbot import AntsBot
+from src.worldstate import AIM, AntStatus, AntWorld
 
 class ExploreDFA:
     '''A DFA that tends to encourage an ant to explore unvisited locations.'''
@@ -84,54 +81,5 @@ class DFABot(AntsBot):
                 direction = self.dfa.get_direction(state, ant)
                 self.dfa.update_state(state, ant)
                 ant.direction = direction
-                
 
-# Main section allowing for dual use either with the standard engine
-# or the LocalEngine. If no arguments are given, it calls
-# AntsBot.Run() to run as a stand alone process, communicating via
-# stdin/stdout. However, if arguments are given, it passes them to
-# LocalEngine and creates an instance of DFABot and an instance of
-# GreedyBot to play against one another.
-if __name__ == '__main__':
-
-    # From Ants distribution: use psyco to speed up all code.
-    try:
-        import psyco
-        psyco.full()
-    except ImportError:
-        pass
-
-    try:
-        if len(sys.argv) > 1: # Run LocalEngine version
-            from batchlocalengine import BatchLocalEngine
-            from mapgen import SymmetricMap
-
-            engine = BatchLocalEngine()
-            engine.AddBot(GreedyBot(engine.GetWorld()))
-            engine.AddBot(GreedyBot(engine.GetWorld()))
-            engine.PrepareGame(sys.argv)
-            engine.game.efficient_update = True
-            
-            num_games = 10
-            # Run 100 random games.
-            start_time = time.time()
-            for i in range(0, num_games):
-                random_map = SymmetricMap(min_dim=30, max_dim=30)
-                random_map.random_walk_map()                
-                engine.game.Reset(random_map.map_text())
-                engine.Run()
-                print [float(r) for r in engine.game.score], "turn", engine.turn
-            elapsed = time.time() - start_time
-            sum_bots = 0
-            print "Time summary: %.2f s total elapsed = %.2f s/game " % (elapsed, elapsed/num_games)
-            for b,bot in engine.bots:
-                sum_bots += engine.bot_time[b]
-                print "\tbot %d %s: %.5f s = %.2f%%" % (b, str(bot.__class__), engine.bot_time[b], engine.bot_time[b]/elapsed*100)     
-            print "\tengine: %.5f s = %.2f%%" % (elapsed-sum_bots, (elapsed-sum_bots)/elapsed*100)
-            
-        else: # Run as stand-alone process
-            bot = DFABot(AntWorld())
-            bot._run()
-
-    except KeyboardInterrupt:
-        print('ctrl-c, leaving ...')
+BOT = DFABot

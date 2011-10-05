@@ -60,54 +60,34 @@ class Ant(object):
         self.status = AntStatus.ALIVE
         self.world = world
 
+
+    ############################################################################
+    ## These methods to be deprecated...
+    ############################################################################
+        
     def distance(self, targ): 
         '''Get the distance to a target location.'''
-        return self.world.distance(self.location, targ)
+        return self.world.distance(self, targ)
 
     def sort_by_distance(self, targ_list): 
         '''Returns a sorted list (dist, (x,y)) from an initial list of (x,y) positions, sorted in ascending order of distance to this ant.'''
-        dists = [ (self.distance(targ), targ) 
-                            for targ in targ_list ]
-
-        dists.sort(key=(lambda x: x[0]))
-        return dists
+        return self.world.sort_by_distance(self, targ_list)
 
     def toward(self, targ):
-        '''Get the possible directions that move this ant closer to this target. Since ants can't move diagonally, there may be multiple directions.'''
-        if targ is None:
-            return []
-        else:
-            return self.world.directions(self.location, targ)
+        """Get the possible directions that move this ant closer to this target. Since ants can't move diagonally, there may be multiple directions."""
+        return self.world.toward(self, targ)
         
     def closest_food(self):
         '''Get the closest food, or None if no food is in sight.'''
-        dists = self.sort_by_distance(self.world.food)
-        if dists:
-            return dists[0][1]
-        else:
-            return None
+        return self.world.closest_food(self)
 
     def closest_enemy(self):
         '''Get the closest enemy, or None if no enemy is in sight.'''
-        dists = self.sort_by_distance(self.world.enemies)
-        if dists:
-            return dists[0][1]
-        else:
-            return None
+        return self.world.closest_enemy(self)
 
     def get_passable_direction(self, dirs):
-        '''Filter a list of NSEW directions to remove directions that are not passable from an ant's current position. Returns the FIRST direction that is passable.'''
-        if dirs is None:
-            return None
-
-        for d in dirs:
-            l = self.world.next_position(self.location, d)
-            if self.world.passable(l) and self.world.unoccupied(l):
-                self.world.L.debug("ant %d: move %s: %s->%s is not blocked" %
-                                (self.ant_id, d, str(self.location),str(l)))
-                return d
-
-        return None
+        """Filter a list of NSEW directions to remove directions that are not passable from an ant's current position. Returns the FIRST direction that is passable."""
+        return self.world.get_passable_direction(self, dirs)
 
 class AntWorld(object):
     '''The AntWorld class. No AntsBot should ever be without one.'''
@@ -354,8 +334,8 @@ class AntWorld(object):
         d_row, d_col = AIM[direction]
         return ((row + d_row) % self.height, (col + d_col) % self.width)
 
-    def distance(self, loc1, loc2):
-        '''Distance between two locations on sphere world.'''
+    def manhattan_distance(self,loc1,loc2):
+        '''Grid distance between two locations on sphere world.'''
         row1,col1 = loc1
         row2,col2 = loc2
         row1 = row1 % self.height
@@ -365,11 +345,105 @@ class AntWorld(object):
         d_col = min(abs(col1 - col2), self.width - abs(col1 - col2))
         d_row = min(abs(row1 - row2), self.height - abs(row1 - row2))
         return d_row + d_col
+    
+    def euclidean_distance2(self,x,y):
+        ''' Euclidean distance between x and y squared '''
+        d_row = abs(x[0] - y[0])
+        d_row = min(d_row, self.height - d_row)
+        d_col = abs(x[1] - y[1])
+        d_col = min(d_col, self.width - d_col)
+        return d_row**2 + d_col**2
+        
+    def get_loc(f):
+        """A decorator that gives us the location tuple if we were passed an ant"""
+        def new_f(self, obj, *args, **kwargs):
+            try:
+                #If it's an ant, get the location
+                location = obj.location
+            except:
+                #Otherwise it better be a tuple for location
+                location = obj
+            #let's pass that into our function
+            return f(self, location, *args, **kwargs)
+        return new_f
+
+    @get_loc
+    def distance(self, loc1, loc2):
+        """Distance between two locations on sphere world.
+        I don't like the ambiguous naming, but for backwards compatibility, keeping this"""
+        return self.manhattan_distance(loc1,loc2)
+
+    @get_loc
+    def sort_by_distance(self, loc, targ_list): 
+        '''Returns a sorted list (dist, (x,y)) from an initial list of (x,y) positions, sorted in ascending order of distance to this ant.'''
+        dists = [ (self.distance(loc, targ), targ) 
+                            for targ in targ_list ]
+
+        dists.sort(key=(lambda x: x[0]))
+        return dists
+
+    @get_loc
+    def toward(self, loc, targ):
+        """Get the possible directions that move this ant closer to this target. Since ants can't move diagonally, there may be multiple directions."""
+        if targ is None:
+            return []
+        else:
+            return self.directions(loc, targ)
+
+    @get_loc
+    def closest_food(self, loc):
+        '''Get the closest food, or None if no food is in sight.'''
+        dists = self.sort_by_distance(loc, self.food)
+        if dists:
+            return dists[0][1]
+        else:
+            return None
+
+    @get_loc
+    def closest_enemy(self, loc):
+        '''Get the closest enemy, or None if no enemy is in sight.'''
+        dists = self.sort_by_distance(loc, self.enemies)
+        if dists:
+            return dists[0][1]
+        else:
+            return None
+
+    @get_loc
+    def closest_friend(self, loc):
+        """Get the closest friendly ant to this position that is not on this position"""
+        import pdb; pdb.set_trace()
+        ant_locs = [ant.location for ant in self.ants]
+        dists = self.sort_by_distance(loc, ant_locs)
+        if dists:
+            if dists[0][1] == loc:
+                if len(dists) > 1:
+                    return dists[1][1]
+                else:
+                    return None
+            else:
+                return dists[0][1]
+        else:
+            return None
+
+    @get_loc
+    def get_passable_direction(self, loc, dirs):
+        """Filter a list of NSEW directions to remove directions that are not passable from an ant's current position. Returns the FIRST direction that is passable."""
+        if dirs is None:
+            return None
+        for d in dirs:
+            l = self.next_position(loc, d)
+            if self.passable(l) and self.unoccupied(l):
+                return d
+        return None
 
     def directions(self, loc1, loc2):
         '''Get directions that move closer to loc2 from loc1.
         
         This horrible function was copied from the distribution code.'''
+        
+        if loc1 == loc2:
+            return [None]
+        
         d = []
         row1, col1 = loc1
         row2, col2 = loc2
