@@ -2,7 +2,7 @@ Instructions on how to use this framework:
 
 PLAYING TK BASED GAMES WITH THE DEBUGGER:
 
-python rungame.py bot1.py bot2.py [options]  
+python rungame.py bot1.py bot2.py --run [options]  
 
 PLAYING OFFICIAL GAMES USING play_one_game.sh:
 
