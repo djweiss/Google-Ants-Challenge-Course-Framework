@@ -370,15 +370,15 @@ class BatchLocalEngine:
         for b,moves in bot_moves:
             valid, ignored, invalid = game.do_moves(b, moves)
             if len(ignored) > 0:
-                L.warning("bot %d gave ignored orders:\n%s" % 
-                                (b,'\n'.join(ignored)))
+                errstr = "bot %d gave ignored orders:\n%s" % (b,'\n'.join(ignored))
+                L.warning(errstr)
                 if STRICT_MODE == True:
-                    raise Exception("One or more bots gave bad orders")
+                    raise Exception("One or more bots gave bad orders: " + errstr)
             if len(invalid) > 0:
-                L.warning("bot %d gave invalid orders:\n%s" % 
-                                (b,'\n'.join(invalid)))
+                errstr = "bot %d gave invalid orders:\n%s" % (b,'\n'.join(invalid))
+                L.warning(errstr)
                 if STRICT_MODE == True:
-                    raise Exception("One or more bots gave bad orders")
+                    raise Exception("One or more bots gave bad orders: " + errstr)
 
         L.debug("Game should execute orders:\n%s" % 
                             str(game.orders))

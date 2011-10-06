@@ -13,7 +13,7 @@ from src.state import GlobalState
                
 class ValueBot(AntsBot):
     """ Value function based AntsBot.
-    
+
     This is a template class that uses a FeatureExtractor and a set of weights to make decisions
     based on a weighted sum of features (value function.) It is capable of loading and saving to JSON using
     the FeatureExtractor.to_dict() method and FeatureExtractor(input_dict) constructor.

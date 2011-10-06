@@ -60,6 +60,8 @@ class Ant(object):
         self.status = AntStatus.ALIVE
         self.world = world
 
+    def __str__(self):
+        return ("<[%s]%d:(%s)->%s>" % (AntStatus.ToString[self.status], self.ant_id, str(self.location), self.direction))
 
     ############################################################################
     ## These methods to be deprecated...
@@ -109,7 +111,7 @@ class AntWorld(object):
         self.L = L
         self.engine = engine
         
-        self.stateless = True
+        self.stateless = False
         self.debug_mode = False
 
     def _setup_parameters(self, data):

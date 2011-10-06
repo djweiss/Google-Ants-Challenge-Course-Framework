@@ -5,6 +5,7 @@ Created on Oct 1, 2011
 '''
 import math
 import worldstate
+from src.localengine import LocalEngine
 
 class GridLookup:     
     """ Datastructure that, once created, allows the lookup of nearby points to query point in constant time.
@@ -79,16 +80,22 @@ class GlobalState:
     
     By default, this GlobalState class does not create lookup tables unless there are at least 25 points of interest (enemies,
     food, or friendly ants.) 
+    
+    This GlobalState class also implements, as an example of another useful thing to keep track of, how many times positions
+    on the map have been visited, at a coarse resolution than individual squares. It demonstrates how to use the new RenderHeatMap()
+    method of LocalEngine which is useful to give a visual representation of map data for debugging purposes in the update() method.
     """    
     
     cutoff = 25   # When to use the lookup table, and when not.
         
-    def __init__(self, world, resolution, visited_cells=10): 
+    def __init__(self, world, resolution, visited_cells=10, draw_heatmap=True): 
         self.world = world
         self.lookup_res = resolution
         self.visited_res = int(min(self.world.height/visited_cells, self.world.width/visited_cells))
         self.visited = {}
-        
+
+        self.draw_heatmap = True
+                
         self.update()
         
     def update(self):
@@ -118,6 +125,10 @@ class GlobalState:
                 self.visited[key] += 1
             else:
                 self.visited[key] = 1
+                
+        if self.world.engine.__class__ == LocalEngine and self.draw_heatmap:
+            heatmap = [ [self.get_visited((row,col)) for col in range(0, self.world.width)] for row in range(0,self.world.height)]
+            self.world.engine.RenderHeatMap(heatmap, window="Visited", minval=0, maxval=5)
         
     def lookup_nearby_food(self, loc):
         """Returns food within 2*lookup_res manhattan distance if n > 25, otherwise all food."""

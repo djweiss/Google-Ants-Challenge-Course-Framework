@@ -49,7 +49,7 @@ from antsgame import * # Importing * is required to get all of the
 PLAY_SPEED_MS = 50 #adjust as needed
 GAMELOG_BOTNUM = -1 #hacky hack hackerson
 # Whether or not to crash the entire game upon invalid moves
-STRICT_MODE = False
+STRICT_MODE = True
 
 global gui
 gui = Frame()    # This is the Tk master object from which all GUI
@@ -152,11 +152,25 @@ class LogWindow():#Toplevel):
         self.textbox.insert(INSERT, msg, (log_record.levelname))
         self.textbox.yview(SCROLL, lines, UNITS)
 
+class Heatmap(Toplevel):
+    
+    def __init__(self, master=None, engine=None, title="unknown"):
+        Toplevel.__init__(self, master=master)
+        
+        # Make resizable. (Copied from tutorial).
+        self.frame = Frame(self)
+        self.title(title)
+        self.resizable(True,True)
+
+        (self.map, self.mapr, geo, map_geo) = engine.InitMap(self.frame)
+        self.geometry(map_geo)
+
+
 # The actual local engine class. See top of file for description.
 class LocalEngine:
-
     def __init__(self, game=None):
         self.bots = []
+        self.heatmaps = {}
 
         # Set up the main Tk window which will show the map.
         gui.grid()
@@ -174,8 +188,8 @@ class LocalEngine:
         self.logwindow = LogWindow(gui,botnum=GAMELOG_BOTNUM) 
         #self.logwindow.title("Engine Log")
         L = logging.getLogger("default") # Use the same logger as the
-                                                                          # default, so the log also goes
-                                                                          # to the console.
+                                         # default, so the log also goes
+                                         # to the console.
         L.setLevel(logging.DEBUG)
         L.addHandler(self.logwindow.log_handler)
         self.turn_phase = 0
@@ -217,7 +231,11 @@ class LocalEngine:
         L.debug("Game created.");
 
         self.turn = 0
-        self.InitMap()
+        
+        self.map_frame = Frame(gui)
+        gui.map, gui.mapr, geo, map_geo = self.InitMap(self.map_frame)
+        gui.master.geometry(geo)
+        
         self.InitControls()
         gui.master.lift()
         if self.game_opts['step_through']:
@@ -252,7 +270,7 @@ class LocalEngine:
 
     # Draws the rectangles on the Map GUI window that will be used to
     # represent game state.
-    def InitMap(self):
+    def InitMap(self, map_frame):
 
         mx = self.game.width*20 # Map window dimensions
         my = self.game.height*20
@@ -260,14 +278,13 @@ class LocalEngine:
         ry = my / (self.game.height+2)
 
         # We use a Tk Canvas object for drawing the rectangles.
-        self.map_frame = Frame(gui)
-        gui.map = Canvas(self.map_frame, width=mx,height=my, bg="#AAA")
-        gui.map.grid(row=0, column=0)
-        self.map_frame.grid(row=0, column=0)
+        mymap = Canvas(map_frame, width=mx,height=my, bg="#AAA")
+        mymap.grid(row=0, column=0)
+        map_frame.grid(row=0, column=0)
 
-        gui.mapr = list()
+        mapr = list()
         for i in xrange(self.game.height):
-            gui.mapr.append([])
+            mapr.append([])
             for j in xrange(self.game.width):
 
                 # Get rectangle coordinates and draw the rectangle.
@@ -275,12 +292,16 @@ class LocalEngine:
                 x1 = rx*(j+2)
                 y0 = ry*(i+1)
                 y1 = ry*(i+2)
-                gui.mapr[i].append(
-                    gui.map.create_rectangle(x0, y0, x1, y1, fill='#fff'))
+                mapr[i].append(
+                    mymap.create_rectangle(x0, y0, x1, y1, fill='#fff'))
         
+        
+        geometry = "%dx%d+0+0" % (mx * 2.6,my * 2)
+        map_geo = "%dx%d+0+0" % (mx, my)
+        return (mymap, mapr, geometry, map_geo)
         # Update the geometry of the master window to reflect the desired
         # map window size.
-        gui.master.geometry("%dx%d+0+0" % (mx * 2.6,my * 2))
+        
 
     # Renders a map based on the mapdata array, where mapdata takes on
     # one of the states from the MapColors array.
@@ -301,7 +322,12 @@ class LocalEngine:
 
     # Renders a colored map to represent arbitrary floating point data
     # values. "Red" is hotter (larger), "Blue" is cooler (smaller).
-    def RenderHeatMap(self, mapdata, minval=None, maxval=None):
+    def RenderHeatMap(self, mapdata, minval=None, maxval=None, window="unknown"):
+
+        if not self.heatmaps.has_key(window):
+            self.heatmaps[window] = Heatmap(title=window, engine=self)
+        
+        heatmap = self.heatmaps[window]
 
         # Concatenates mapdata into a single list.
         vals = list()
@@ -340,8 +366,7 @@ class LocalEngine:
                     L.error("WTF? colidx = " + str(colidx) + ", c = " + str(c) 
                                     + ", minval = " + str(minval) + ", maxval = " 
                                     + str(maxval))
-                gui.map.itemconfigure(gui.mapr[i][j], 
-                                                            fill=cols[colidx])
+                heatmap.map.itemconfigure(heatmap.mapr[i][j], fill=cols[colidx])
 
     # Tk callback event for quitting.
     def QuitGameCallback(self, event):
