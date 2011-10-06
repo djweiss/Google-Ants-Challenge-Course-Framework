@@ -5,7 +5,6 @@ Created on Oct 1, 2011
 '''
 import math
 import worldstate
-from src.localengine import LocalEngine
 
 class GridLookup:     
     """ Datastructure that, once created, allows the lookup of nearby points to query point in constant time.
@@ -126,9 +125,13 @@ class GlobalState:
             else:
                 self.visited[key] = 1
                 
-        if self.world.engine.__class__ == LocalEngine and self.draw_heatmap:
-            heatmap = [ [self.get_visited((row,col)) for col in range(0, self.world.width)] for row in range(0,self.world.height)]
-            self.world.engine.RenderHeatMap(heatmap, window="Visited", minval=0, maxval=5)
+        # This is very important: do not import localengine at top of python file or else your code will
+        # not be able to run on the competition server. 
+        if self.world.engine is not None:
+            from src.localengine import LocalEngine
+            if self.world.engine.__class__ == LocalEngine and self.draw_heatmap:
+                heatmap = [ [self.get_visited((row,col)) for col in range(0, self.world.width)] for row in range(0,self.world.height)]
+                self.world.engine.RenderHeatMap(heatmap, window="Visited", minval=0, maxval=5)
         
     def lookup_nearby_food(self, loc):
         """Returns food within 2*lookup_res manhattan distance if n > 25, otherwise all food."""

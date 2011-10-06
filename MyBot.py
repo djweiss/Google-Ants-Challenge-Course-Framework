@@ -5,10 +5,10 @@
 # A small stub that will be run when you submit 
 # your code to the Competition Server.
 
-from worldstate import AntWorld
+from src.worldstate import AntWorld
 
 ### CHANGE THIS TO IMPORT FROM YOUR BOT FILE.
-from dfabot import BOT
+from valuebot import BOT
 
 # Run the bot.
 bot = BOT(AntWorld())

@@ -6,7 +6,7 @@ Created on Oct 1, 2011
 
 from src.batchlocalengine import BatchLocalEngine
 from greedybot import GreedyBot
-from src.features import FeatureExtractor, MovingTowardsFeatures
+from src.features import MovingTowardsFeatures
 from valuebot import ValueBot
 import random
 
@@ -36,16 +36,25 @@ if __name__ == '__main__':
         w = [random.uniform(-1,1) for i in range(0, features.num_features())]
         bot.set_features(features)        
         bot.set_weights(w)
-        
+    
     # Play several games against GreedyBot
-    (bot_scores, bot_wins, bot_games) = engine.RunTournament(5, team_a, [GreedyBot(engine.GetWorld())], [30, 30])
+    (bot_scores, bot_wins, bot_score_diffs, bot_games) = engine.RunTournament(5, team_a, [GreedyBot(engine.GetWorld())], [30, 30])
 
     # Sort bots by their win rate
     a_rate = win_rate(bot_wins[0], bot_games[0])
     
-    # Print out tournament results
+    # Print out tournament results according to win rates 
     for i, rate in a_rate:
         print "Bot %d: Win rate = %g " % (i, rate)
+        print team_a[i]
+        team_a[i].save("saved_bots/bot_%d.json" % i)
+
+    # Sort bots by their average score differentials
+    a_diffs = win_rate(bot_score_diffs[0], bot_games[0])
+    
+    # Print out tournament results according to score differentials
+    for i, diff in a_diffs:
+        print "Bot %d: Score diff = %g " % (i, diff)
         print team_a[i]
         team_a[i].save("saved_bots/bot_%d.json" % i)
     

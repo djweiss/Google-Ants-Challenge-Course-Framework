@@ -155,6 +155,13 @@ class BatchLocalEngine:
         For each bot in the lists team_a_bots and team_b_bots, plays num_games on random maps with
         sizes randomly generated between map_dims[0] and map_dims[1].
         
+        Returns a 4-tuple:
+        (bot_scores,       - The score of each bot on each its games
+         bot_wins,         - Whether or not each bot won for each of its games
+         bot_score_diffs,  - The score differential for each bot's games (> 0 = won)
+         bot_games         - The number of games played by each bot.
+         )
+        
         """
         
         assert(self.game is not None)
@@ -165,6 +172,7 @@ class BatchLocalEngine:
         bot_wins = [[0 for i in range(0, len(team_a_bots))], 
                     [0 for i in range(0, len(team_b_bots))]]                    
         bot_scores = deepcopy(bot_wins)
+        bot_score_diffs = deepcopy(bot_wins)
         bot_games = deepcopy(bot_wins)
         
         total_turns = 0
@@ -195,6 +203,7 @@ class BatchLocalEngine:
                     self.bots = [(0, team_a_bots[a]), (1, team_b_bots[b])]
                     for botnum, bot in self.bots:
                         bot.world = self.GetWorld()
+                        bot.reset()
                         bot.world.L = FakeLogger()
                     self.Run()
                     
@@ -205,6 +214,9 @@ class BatchLocalEngine:
                         bot_wins[1][b] +=1
                     bot_scores[0][a] += self.game.score[0]
                     bot_scores[1][b] += self.game.score[1]
+        
+                    bot_score_diffs[0][a] += self.game.score[0]-self.game.score[1]
+                    bot_score_diffs[1][b] += self.game.score[1]-self.game.score[0]
                     
                     bot_games[0][a] += 1
                     bot_games[1][b] += 1
@@ -227,7 +239,7 @@ class BatchLocalEngine:
             print "\tbot %s: %.5f s = %.2f%%" % (b, self.bot_time[b], self.bot_time[b]/elapsed*100)     
         print "\tengine: %.5f s = %.2f%%" % (elapsed-sum_bots, (elapsed-sum_bots)/elapsed*100)
         
-        return (bot_scores, bot_wins, bot_games)
+        return (bot_scores, bot_wins, bot_score_diffs, bot_games)
         
     # Returns a new AntWorld with engine set properly for use by client bots.
     def GetWorld(self):
