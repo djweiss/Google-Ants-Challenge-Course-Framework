@@ -40,7 +40,8 @@ class GreedyBot(AntsBot):
                         ant.direction = None
                     else:
                         next_locations[nextpos] = ant.ant_id
-                        
+        
+        print "sending orders:"                
         print [str(a) for a in self.world.ants]
 
 BOT = GreedyBot

@@ -729,13 +729,15 @@ class Ants(Game):
             Raises an error if no ant is found at the location
               (if ignore error is set to False)
         """
-        try:
+        try:           
             loc = ant.loc
             self.map[loc[0]][loc[1]] = LAND
+            print "killing ant at %s (%d)" % (str(ant.loc), ant.owner)
             self.killed_ants.append(ant)
             ant.killed = True
             ant.die_turn = self.turn
             return self.current_ants.pop(loc)
+
         except KeyError:
             if not ignore_error:
                 raise Exception("Kill ant error",

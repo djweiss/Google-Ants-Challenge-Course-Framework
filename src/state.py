@@ -129,6 +129,7 @@ class GlobalState:
         if self.world.engine.__class__ == LocalEngine and self.draw_heatmap:
             heatmap = [ [self.get_visited((row,col)) for col in range(0, self.world.width)] for row in range(0,self.world.height)]
             self.world.engine.RenderHeatMap(heatmap, window="Visited", minval=0, maxval=5)
+            self.world.engine.RenderHeatMap(heatmap, window="Visited2", minval=0, maxval=5)
         
     def lookup_nearby_food(self, loc):
         """Returns food within 2*lookup_res manhattan distance if n > 25, otherwise all food."""

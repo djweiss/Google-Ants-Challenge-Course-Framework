@@ -111,7 +111,7 @@ class AntWorld(object):
         self.L = L
         self.engine = engine
         
-        self.stateless = False
+        self.stateless = True
         self.debug_mode = False
 
     def _setup_parameters(self, data):
@@ -179,8 +179,8 @@ class AntWorld(object):
 
         if self.stateless:
             self.ants = []
-            self.ants_lookup = {}
-            
+            print "Received data: " + str(data)
+        
         # Now parse the data.
         for line in data.split('\n'):
             line = line.strip().lower()
@@ -203,8 +203,7 @@ class AntWorld(object):
                                 pos = (row, col)
                                 ant_id = len(self.ants)
                                 if self.debug_mode:
-                                    self.L.debug("New ant %d found at (%d,%d)" % 
-                                                 (ant_id, pos[0], pos[1]))
+                                    self.L.debug("New ant %d found at (%d,%d)" % (ant_id, pos[0], pos[1]))
                                 self.ants.append(Ant(self, pos, ant_id))
                                 self.ant_lookup[pos] = ant_id
                             else:
@@ -227,7 +226,7 @@ class AntWorld(object):
         
         if not self.stateless:
             self._track_friendlies(check_ants)
-    
+
     def _track_friendlies(self, check_ants):
         # Track friendly living ants.
         for ant in [a for a in self.ants 
