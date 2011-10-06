@@ -4,6 +4,15 @@ PLAYING TK BASED GAMES WITH THE DEBUGGER:
 
 python rungame.py bot1.py bot2.py --run [options]  
 
-PLAYING OFFICIAL GAMES USING play_one_game.sh:
+PLAYING OFFICIAL GAMES USING play_visualizer.sh:
 
-python rungame.py bot.py 
+play_visualizer.sh bot1.py bot2.py 
+
+RUNNING ANY BOT IN COMPETITION MODE:
+
+python rungame.py bot.py
+
+
+
+
+
