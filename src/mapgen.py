@@ -184,7 +184,23 @@ class SymmetricMap():
                     self.fill_squares(c_loc, '.')
 
 if __name__ == '__main__':
-    example_map = SymmetricMap()
+    import optparse
+    
+    parse = optparse.OptionParser()
+    parse.add_option("-n", "--num_players", default=2, type="int",
+                     dest="num_players", help="Number of players on map.")
+    parse.add_option("-l", "--min_dimension", default=30, type="int",
+                     dest="min_dim", help="Map min dimensions.")
+    parse.add_option("-u", "--max_dimensions", default=30, type="int",
+                     dest="max_dim", help="Map max dimensions.")
+
+    (options, args) = parse.parse_args()
+    
+    example_map = SymmetricMap(min_players=options.num_players, max_players=options.num_players,
+                               min_dim=options.min_dim, max_dim=options.max_dim)
     example_map.random_walk_map()
     example_map.print_map()
 
+#def __init__(self, min_players=2, max_players=2, min_dim=20, max_dim=20, 
+#                 min_start_distance=5, min_land_proportion=0.75, max_land_proportion=0.9):
+    

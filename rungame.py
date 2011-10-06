@@ -1,4 +1,5 @@
 import sys
+import os
 from optparse import OptionParser
 
 #Main section allowing for dual use either with the standard engine
@@ -15,9 +16,9 @@ if __name__ == '__main__':
     except ImportError:
         pass
 
-    try:
+    try:        
         #-3 here is to cut of .py, which is not used in imports
-        botlist = [s for s in sys.argv[1:] if s[-3:] == '.py']
+        botlist = [os.path.basename(s) for s in sys.argv[1:] if s[-3:] == '.py']
         arglist = [sys.argv[0]]+[s for s in sys.argv[1:] if s[-3:] != '.py']
         bots = [__import__(botstr[:-3]).BOT for botstr in botlist]
         
