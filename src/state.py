@@ -82,12 +82,12 @@ class GlobalState:
 
     def lookup_nearby_friendly(self, loc):
         
-        ant_locs = [ant.location for ant in self.world.ants]
+        ant_locs = [ant.location for ant in self.world.ants if ant.location != loc]
         if self.grid_friendly is None:
             return ant_locs
 
         # remove the query point from the lookup        
-        return set(self.grid_friendly.nearby_points(loc))-set(loc)
+        return self.grid_friendly.nearby_points(loc)
 
     def lookup_nearby_enemy(self, loc):
         if self.grid_enemy is None:

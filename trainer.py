@@ -34,7 +34,6 @@ if __name__ == '__main__':
         bot.set_weights(w)
         
     # Play several games against GreedyBot
-    team_b = [GreedyBot(engine.GetWorld())]
     (bot_scores, bot_wins, bot_games) = engine.RunTournament(5, team_a, [GreedyBot(engine.GetWorld())], [30, 30])
 
     # Sort bots by their win rate

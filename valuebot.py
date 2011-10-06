@@ -58,7 +58,7 @@ class ValueBot(AntsBot):
         dot_product = 0
         for i in range(0, len(feature_vector)):
             if feature_vector[i]:
-                self.world.L.debug("\tf: %s = %g" % (self.features.feature_name(i), self.weights[i]))
+                self.world.L.info("\tf: %s = %g" % (self.features.feature_name(i), self.weights[i]))
                 dot_product += self.weights[i]
         self.world.L.info("\tdot_product = %g" % dot_product)
         
