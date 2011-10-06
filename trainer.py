@@ -31,7 +31,7 @@ if __name__ == '__main__':
     
     # Initialize a random set of bots
     features = MovingTowardsFeatures()
-    team_a = [ValueBot(engine.GetWorld(), load_file=None) for i in range(20)]
+    team_a = [ValueBot(engine.GetWorld(), load_file=None) for i in range(5)]
     for bot in team_a:
         w = [random.uniform(-1,1) for i in range(0, features.num_features())]
         bot.set_features(features)        
