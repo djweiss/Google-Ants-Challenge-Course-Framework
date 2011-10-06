@@ -732,7 +732,6 @@ class Ants(Game):
         try:           
             loc = ant.loc
             self.map[loc[0]][loc[1]] = LAND
-            print "killing ant at %s (%d)" % (str(ant.loc), ant.owner)
             self.killed_ants.append(ant)
             ant.killed = True
             ant.die_turn = self.turn

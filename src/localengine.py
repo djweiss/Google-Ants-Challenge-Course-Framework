@@ -322,8 +322,17 @@ class LocalEngine:
 
     # Renders a colored map to represent arbitrary floating point data
     # values. "Red" is hotter (larger), "Blue" is cooler (smaller).
-    def RenderHeatMap(self, mapdata, minval=None, maxval=None, window="unknown"):
-
+    def RenderHeatMap(self, mapdata, minval=None, maxval=None, window="heatmap"):
+        """ Renders a heatmap of data.
+        
+        Takes in mapdata in the form of a 2-D list where mapdata[row][col] is some numeric value.
+        Plots the mapdata by scaling between blue and red, where blue = minval and red = maxval.
+        If minval and maxval are not provided, automatically computes min and max values.
+        
+        window is the name of the heatmap; for each unique window string, a new heatmap window will be created.
+        
+        """
+        
         if not self.heatmaps.has_key(window):
             self.heatmaps[window] = Heatmap(title=window, engine=self)
         

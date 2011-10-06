@@ -96,7 +96,6 @@ class StepAnts(Ants):
     def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
         # Determine players alive at the start of the turn.  Only these
         # players will be able to score this turn.
-        print "executing orders: " + str(self.orders)
         self.was_alive = set(i for i in range(self.num_players) if self.is_alive(i))
         self.do_orders()
 
@@ -122,8 +121,7 @@ class StepAnts(Ants):
         # Since all the ants have moved we can update the vision.
         self.update_vision()
         self.update_revealed()
-        print "battle phase completed."
-        
+                
 class FakeLogger:
     def debug(self, text):
         None
@@ -334,13 +332,8 @@ class BatchLocalEngine:
     # state for the next turn.
     def SendAndRcvMessages(self):
         game = self.game
-
-
-        print "Communicating with bots: -- orders before =  " + str(game.orders)
-        
         bot_moves = []  # Movement cache
 
-        
         for b, bot in self.bots:
             msg = None
 
@@ -372,7 +365,6 @@ class BatchLocalEngine:
         if self.turn > 0:
             game.start_turn()
         
-        print "Communicating with bots: -- parsing order =  " + str(game.orders)
         # Have the game process the cached moves.
         for b,moves in bot_moves:
             valid, ignored, invalid = game.do_moves(b, moves)
@@ -387,7 +379,6 @@ class BatchLocalEngine:
                 if STRICT_MODE == True:
                     raise Exception("One or more bots gave bad orders: " + errstr)
 
-        print "Communicating with bots: -- orders after =  " + str(game.orders)
         L.debug("Game should execute orders:\n%s" % 
                             str(game.orders))
 

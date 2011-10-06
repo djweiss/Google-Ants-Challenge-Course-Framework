@@ -111,7 +111,7 @@ class AntWorld(object):
         self.L = L
         self.engine = engine
         
-        self.stateless = True
+        self.stateless = False
         self.debug_mode = False
 
     def _setup_parameters(self, data):
@@ -179,7 +179,6 @@ class AntWorld(object):
 
         if self.stateless:
             self.ants = []
-            print "Received data: " + str(data)
         
         # Now parse the data.
         for line in data.split('\n'):
