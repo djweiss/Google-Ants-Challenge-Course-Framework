@@ -39,10 +39,10 @@ MAP_RENDER = 'abcdefghijklmnopqrstuvwxyz?!%*.'
 
 # Converts N-S-E-W directions into X-Y vectors.
 AIM = {'n': (-1, 0),
-              'e': (0, 1),
-              's': (1, 0),
-              'w': (0, -1),
-              'halt': (0,0)}
+       'e': (0, 1),
+       's': (1, 0),
+       'w': (0, -1),
+       'halt': (0,0)}
 
 class AntStatus:
     '''Enum type to represent persistent ant status.'''
@@ -110,6 +110,7 @@ class AntWorld(object):
         self.engine = engine
         
         self.stateless = True
+        self.debug_mode = False
 
     def _setup_parameters(self, data):
         '''Parse raw data to determine game settings.'''
@@ -118,7 +119,8 @@ class AntWorld(object):
             if len(line) > 0:
                 tokens = line.split()
 
-                self.L.debug("tokens: " + str(tokens))
+                if self.debug_mode:
+                    self.L.debug("tokens: " + str(tokens))
 
                 key = tokens[0]
                 if key == 'cols':
@@ -150,7 +152,8 @@ class AntWorld(object):
 
     # _updates a world state based on data from the engine/server.
     def _update(self, data):
-        self.L.debug("Updating world state:")
+        if self.debug_mode:
+            self.L.debug("Updating world state:")
 
         # Clear map of last turn's friendly ants.
         for row, col in [ant.location for ant in self.ants]:
@@ -197,12 +200,14 @@ class AntWorld(object):
                             if self.stateless:
                                 pos = (row, col)
                                 ant_id = len(self.ants)
-                                self.L.debug("New ant %d found at (%d,%d)" % 
-                                             (ant_id, pos[0], pos[1]))
+                                if self.debug_mode:
+                                    self.L.debug("New ant %d found at (%d,%d)" % 
+                                                 (ant_id, pos[0], pos[1]))
                                 self.ants.append(Ant(self, pos, ant_id))
                                 self.ant_lookup[pos] = ant_id
                             else:
-                                self.L.debug("RCV MY ANT at %s" % str((row,col)))
+                                if self.debug_mode:
+                                    self.L.debug("RCV MY ANT at %s" % str((row,col)))
                                 check_ants[(row, col)] = owner
                         else:
                             self.enemy_dict[(row, col)] = owner
@@ -212,7 +217,8 @@ class AntWorld(object):
                         self.food.append((row, col))
                     elif tokens[0] == 'w': # water found
                         self.map[row][col] = WATER
-                        self.L.debug("RCV WATER at %d,%d" % (row,col))
+                        if self.debug_mode:
+                            self.L.debug("RCV WATER at %d,%d" % (row,col))
                     elif tokens[0] == 'd': # dead body found
                         self.map[row][col] = DEAD
                         self.dead_dict[(row,col)] = True
@@ -223,8 +229,9 @@ class AntWorld(object):
     def _track_friendlies(self, check_ants):
         # Track friendly living ants.
         for ant in [a for a in self.ants 
-                                if a.status == AntStatus.ALIVE]:
-            self.L.debug("tracking ant: %d - %s" % (ant.ant_id, str(ant.location)))
+                                if a.status == AntStatus.ALIVE]:                                    
+            if self.debug_mode:
+                self.L.debug("tracking ant: %d - %s" % (ant.ant_id, str(ant.location)))
 
             # Ant stats is unknown until proven otherwise.
             ant.status = AntStatus.UNKNOWN
@@ -237,19 +244,22 @@ class AntWorld(object):
             next_pos = ant.location
             if ant.direction != None:
                 proj_pos = self.next_position(ant.location, ant.direction)
-                self.L.debug("projected position: %s --> %s" % 
-                                (ant.direction, str(proj_pos)))
+                if self.debug_mode:
+                    self.L.debug("projected position: %s --> %s" % 
+                                 (ant.direction, str(proj_pos)))
 
                 # Note: if the ordered direction was not passable, it will not
                 # have moved.
                 if self.passable(proj_pos):
                     next_pos = proj_pos
                 else:
-                    self.L.debug("projection NOT passable")
+                    if self.debug_mode:
+                        self.L.debug("projection NOT passable")
 
             # Look for the live ant in the list received from the server.
             if check_ants.has_key(next_pos):
-                self.L.debug("FOUND ant %d at %s" % (ant.ant_id, str(next_pos)))
+                if self.debug_mode:
+                    self.L.debug("FOUND ant %d at %s" % (ant.ant_id, str(next_pos)))
 
                 # Update living ant's position and status.
                 ant.status = AntStatus.ALIVE
@@ -259,7 +269,8 @@ class AntWorld(object):
             elif self.dead_dict.has_key(next_pos):
 
                 # Ant is dead :(
-                self.L.debug("FOUND ant %d DEAD at %s" % (ant.ant_id, str(next_pos)))
+                if self.debug_mode:
+                    self.L.debug("FOUND ant %d DEAD at %s" % (ant.ant_id, str(next_pos)))
                 ant.status = AntStatus.DEAD
             else:
 
@@ -275,32 +286,39 @@ class AntWorld(object):
                                   (pos[0], pos[1]))
             else:
                 ant_id = len(self.ants)
-                self.L.debug("New ant %d found at (%d,%d)" % 
-                                  (ant_id, pos[0], pos[1]))
+                if self.debug_mode:
+                    self.L.debug("New ant %d found at (%d,%d)" % 
+                                 (ant_id, pos[0], pos[1]))
                 self.ants.append(Ant(self, pos, ant_id))
                 self.ant_lookup[pos] = ant_id
 
         # Print out a status to the log window. First dead ants, then
         # unknown, and then alive.
-#        for ant in [a for a in self.ants 
-#                                if a.status == AntStatus.DEAD]:
-#            self.L.debug("ant %d status: %s, %s" % 
-#                            (ant.ant_id, str(ant.location),
-#                            AntStatus.ToString[ant.status]))
-#        for ant in [a for a in self.ants 
-#                                if a.status == AntStatus.UNKNOWN]:
-#            self.L.warning("ant %d status: %s, %s" % 
-#                            (ant.ant_id, str(ant.location),
-#                            AntStatus.ToString[ant.status]))
-#        for ant in [a for a in self.ants 
-#                                if a.status == AntStatus.ALIVE]:
-#            self.L.info("ant %d status: %s, %s" % 
-#                            (ant.ant_id, str(ant.location),
-#                            AntStatus.ToString[ant.status]))
+        if self.debug_mode:
+            for ant in [a for a in self.ants 
+                                    if a.status == AntStatus.DEAD]:
+                self.L.debug("ant %d status: %s, %s" % 
+                                (ant.ant_id, str(ant.location),
+                                AntStatus.ToString[ant.status]))
+            for ant in [a for a in self.ants 
+                                    if a.status == AntStatus.UNKNOWN]:
+                self.L.warning("ant %d status: %s, %s" % 
+                                (ant.ant_id, str(ant.location),
+                                AntStatus.ToString[ant.status]))
+            for ant in [a for a in self.ants 
+                                    if a.status == AntStatus.ALIVE]:
+                self.L.info("ant %d status: %s, %s" % 
+                                (ant.ant_id, str(ant.location),
+                                AntStatus.ToString[ant.status]))
 
     def _finish_turn(self):
         '''Finish the turn by sending out the orders to the game engine or server.'''
 
+        # Check for invalid direction.
+        for a in self.ants:
+            if a.direction != None and a.direction not in  ['n','s','e','w']:
+                raise AssertionError("%s is not a valid direction!" % a.direction)
+            
         # Only send orders for alive, moving ants.
         orders = ['o %d %d %s' % 
                             (a.location[0], a.location[1], a.direction)
