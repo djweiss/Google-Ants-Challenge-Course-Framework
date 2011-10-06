@@ -16,7 +16,7 @@ from mapgen import SymmetricMap
 import time
 
 # Whether or not to crash the entire game upon invalid moves
-STRICT_MODE = False
+STRICT_MODE = True
 
 # A slightly modified version of the original Ants game from
 # antsgame.py: this breaks up the finish_turn() method of the original
@@ -139,7 +139,6 @@ class FakeLogger:
         
 # The actual local engine class. See top of file for description.
 class BatchLocalEngine:
-
     def __init__(self, game=None, level=logging.CRITICAL):
         self.bots = []
         self.bot_time = {}        
@@ -151,6 +150,13 @@ class BatchLocalEngine:
         self.game = None
         
     def RunTournament(self, num_games, team_a_bots, team_b_bots, map_dims):
+        """ Play a multi-game tournament between two teams of bots.
+        
+        For each bot in the lists team_a_bots and team_b_bots, plays num_games on random maps with
+        sizes randomly generated between map_dims[0] and map_dims[1].
+        
+        """
+        
         assert(self.game is not None)
         self.bot_time = {}
                         
@@ -238,6 +244,8 @@ class BatchLocalEngine:
         self.bot_time[str(bot.__class__)] = 0
         
     def PrepareGame(self, argv):
+        """ Create a instance of StepAnts and set game options from arguments.""" 
+        
         # Parse command line options and fail if unsuccessful.
         self.game_opts = self.GetOptions(argv)
         if self.game_opts == None:

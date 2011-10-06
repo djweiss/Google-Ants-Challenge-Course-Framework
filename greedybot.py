@@ -26,8 +26,19 @@ class GreedyBot(AntsBot):
     # Main logic
     def do_turn(self):
         # Run the routine for each living ant independently.
+        next_locations = {}
         for ant in self.world.ants:
             if ant.status == AntStatus.ALIVE:
                 ant.direction = self.get_direction(ant)
+                
+                if ant.direction == 'halt' or ant.direction == None:
+                    ant.direction = None
+                else:
+                    # Basic collision detection: don't land on the same square as another friendly ant.
+                    nextpos = self.world.next_position(ant.location, ant.direction) 
+                    if nextpos in next_locations.keys():  
+                        ant.direction = None
+                    else:
+                        next_locations[nextpos] = ant.ant_id
 
 BOT = GreedyBot

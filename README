@@ -7,5 +7,3 @@ python rungame.py bot1.py bot2.py --run [options]
 PLAYING OFFICIAL GAMES USING play_one_game.sh:
 
 python rungame.py bot.py 
-
-

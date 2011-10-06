@@ -12,11 +12,29 @@ from src.features import FeatureExtractor, MovingTowardsFeatures
 from src.state import GlobalState
                
 class ValueBot(AntsBot):
+    """ Value function based AntsBot.
+    
+    This is a template class that uses a FeatureExtractor and a set of weights to make decisions
+    based on a weighted sum of features (value function.) It is capable of loading and saving to JSON using
+    the FeatureExtractor.to_dict() method and FeatureExtractor(input_dict) constructor.
+      
+    """
+    
     def __init__(self, world, load_file="valuebot.json"):
+        """Initialize, optionally loading from file. 
+        
+        Note: this bot disables tracking of friendly ants in the AntWorld, 
+        so that ant_id is no longer consistent between turns. This speeds up
+        game speed dramatically, but means it is trickier to maintain specific ant states.
+        """
+        
         AntsBot.__init__(self, world)
         self.state = None
         self.features = None
         self.weights = None
+        
+        # **** NOTE: Disable ant tracking to speed up game playing. 
+        self.world.stateless = True
         
         # Try to load saved configuration from file
         if load_file is not None and os.path.exists(load_file):
@@ -25,9 +43,10 @@ class ValueBot(AntsBot):
             self.set_features(FeatureExtractor(data['features']))
             self.set_weights(data['weights'])
             fp.close()
-            print world.height
     
     def save(self, filename):
+        """Save features and weights to file."""
+        
         fp = file(filename, "w")
         data = {'features': self.features.to_dict(), 
                 'weights': self.weights }
@@ -35,6 +54,8 @@ class ValueBot(AntsBot):
         fp.close()
             
     def __str__(self):
+        """Print a labeled list of weight values."""
+        
         s = 'ValueBot:\n'
         for i in range(self.features.num_features()):
             s += '\t%s = %g\n' % (self.features.feature_name(i), 
@@ -46,12 +67,16 @@ class ValueBot(AntsBot):
         self.world.L.debug("Setting features: %s" % str(self.features))
         
     def set_weights(self, weights):
+        """Set weight vector. Note: checks that len(weights) == self.features.num_features()."""                    
+                
         self.weights = weights
         self.world.L.debug("Setting weights: %s" % str(self.weights))
         if self.features == None or not len(self.weights) == self.features.num_features():
             raise AssertionError("Features need to be set before weights!")
 
     def value(self, state, loc, action):
+        """Compute the value of a given action w.r.t. a given state and ant location."""
+        
         feature_vector = self.features.extract(self.world, state, loc, action)
         
         self.world.L.info("Evaluating move: %s, %s:" % (str(loc), action))
@@ -65,7 +90,8 @@ class ValueBot(AntsBot):
         return dot_product
              
     def get_direction(self, ant):
-
+        """Evaluates each of the currently passable directions and picks the one with maximum value."""
+        
         # get the passable directions, in random order to break ties
         rand_dirs = self.world.get_passable_directions(ant.location, AIM.keys())
         random.shuffle(rand_dirs)
@@ -87,11 +113,17 @@ class ValueBot(AntsBot):
 
     # Main logic
     def do_turn(self):
+        """Precomputes global state, and then chooses max value action for each ant independently."""
+        
         # Run the routine for each living ant independently.
         next_locations = {}
         
-        # Resolution: 5 squares
-        self.state = GlobalState(self.world, 10)
+        # Grid lookup resolution: size 10 squares
+        if self.state == None:
+            self.state = GlobalState(self.world, resolution=10)
+        else:
+            self.state.update()
+        
         for ant in self.world.ants:
             if ant.status == AntStatus.ALIVE:
                 ant.direction = self.get_direction(ant)

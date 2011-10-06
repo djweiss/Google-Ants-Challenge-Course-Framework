@@ -11,6 +11,12 @@ from valuebot import ValueBot
 import random
 
 def win_rate(bot_wins, bot_games):
+    """ Compute the win % and sort accordingly given # of wins and games.
+    
+    Outputs a sorted list of tuples (i, rate), where i is the original index of the bot
+    in bot_wins.
+    
+    """
     
     win_rate = [(i, float(bot_wins[i]) / float(bot_games[i])) for i in range(0, len(bot_wins))]
     win_rate.sort(key=lambda x: x[1], reverse=True)
@@ -23,11 +29,9 @@ if __name__ == '__main__':
     # Run quick games: 100 turns only
     engine.PrepareGame(["--run", "-t", "100"])
     
-    # Generate a population of 30 random bots.
-    features = FeatureExtractor.create(MovingTowardsFeatures.type_name)
-    
     # Initialize a random set of bots
-    team_a = [ValueBot(engine.GetWorld(), load_file=None) for i in range(5)]
+    features = MovingTowardsFeatures()
+    team_a = [ValueBot(engine.GetWorld(), load_file=None) for i in range(10)]
     for bot in team_a:
         w = [random.uniform(-1,1) for i in range(0, features.num_features())]
         bot.set_features(features)        
