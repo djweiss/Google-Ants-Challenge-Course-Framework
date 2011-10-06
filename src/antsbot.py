@@ -17,7 +17,10 @@ class AntsBot(object):
 
     def do_turn(self):
         '''Template for logic that must be filled in by the child bot.'''
-        raise NotImplemented    
+        raise NotImplemented
+    
+    def reset(self):
+        pass    
 
     def _receive(self, msg):
         '''Parses message from the server/engine and returns output.'''

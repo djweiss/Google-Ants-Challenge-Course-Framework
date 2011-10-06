@@ -136,7 +136,10 @@ class ValueBot(AntsBot):
                         ant.direction = None
                     else:
                         next_locations[nextpos] = ant.ant_id
-                                    
+
+    def reset(self):
+        self.state = None
+        
 # Set BOT variable to be compatible with rungame.py                            
 BOT = ValueBot
 
@@ -155,11 +158,16 @@ if __name__ == '__main__':
         b = ValueBot(engine.GetWorld(), load_file=None)
         engine.AddBot(b)        
         b.set_features(MovingTowardsFeatures())
-        b.set_weights([random.uniform(-1,1) for i in range (0, b.features.num_features())])
+        #b.set_weights([random.uniform(-1,1) for i in range (0, b.features.num_features())])
+        b.set_weights([0, 1, 0])
         b.world.L.info("Randomly initialized to:" + str(b))
         
     # Add a GreedyBot opponent    
-    engine.AddBot(GreedyBot(engine.GetWorld()))
+    #engine.AddBot(GreedyBot(engine.GetWorld()))
+    b = ValueBot(engine.GetWorld(), load_file=None)
+    b.set_features(MovingTowardsFeatures())
+    b.set_weights([0,0,0])
+    engine.AddBot(b)
     
     # Generate and play on random 30 x 30 map
     random_map = SymmetricMap(min_dim=30, max_dim=30)
