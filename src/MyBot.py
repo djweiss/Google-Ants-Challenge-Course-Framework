@@ -7,8 +7,9 @@
 
 from worldstate import AntWorld
 
-### CHANGE THIS TO IMPORT THE BOT YOU'D LIKE TO RUN.
-from dfabot import DFABot
-bot = DFABot(AntWorld())
+### CHANGE THIS TO IMPORT FROM YOUR BOT FILE.
+from dfabot import BOT
 
+# Run the bot.
+bot = BOT(AntWorld())
 bot._run()

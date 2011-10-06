@@ -5,35 +5,18 @@
 # This batch version of LocalEngine will run a game silently and simply return bot scores.
 # It can also provide a bit more feedback optionally.
 
-import traceback
+import sys
 from optparse import OptionParser
 from worldstate import AntWorld
 from antsbot import *
 from antsgame import *
 from logutil import *
+from copy import deepcopy
+from mapgen import SymmetricMap
 import time
 
 # Whether or not to crash the entire game upon invalid moves
 STRICT_MODE = False
-
-#global gui
-#gui = Frame()    # This is the Tk master object from which all GUI
-                              # elements will spawn
-
-# A lookup table for visualizing the map
-MapColors = [
-            'red', # ant color 1
-            'blue', # ant color 2
-            'green', # ant color 3
-            'orange', # ant color 4
-            'magenta', # ant color 5
-            'cyan', # ant color 6
-            '#000', # unseen
-            '#fee', # conflict(?)
-            '#88f', # water
-            '#fff', # food
-            '#666', # land
-]
 
 # A slightly modified version of the original Ants game from
 # antsgame.py: this breaks up the finish_turn() method of the original
@@ -119,7 +102,7 @@ class StepAnts(Ants):
     def FinishTurnResolve(self): # Content copied from Ants.finish_turn()
         # Run attack, food, etc. resolution and scoring.
         self.do_attack()
-        self.do_spawn()
+        self.do_spawn()                       
         self.food_extra += Fraction(self.food_rate * self.num_players, self.food_turn)
         food_now = self.food_extra // self.num_players
         self.food_extra %= self.num_players
@@ -159,14 +142,85 @@ class BatchLocalEngine:
 
     def __init__(self, game=None, level=logging.CRITICAL):
         self.bots = []
-        self.bot_time = []
+        self.bot_time = {}        
         
-        L = logging.getLogger("default") # Use the same logger as the
-                                         # default, so the log also goes
-                                         # to the console.
+        L = logging.getLogger("default") 
         L.setLevel(level)
         self.turn_phase = 0
         self.map_list = []
+        self.game = None
+        
+    def RunTournament(self, num_games, team_a_bots, team_b_bots, map_dims):
+        assert(self.game is not None)
+        self.bot_time = {}
+                        
+        played_games = 0
+        start_time = time.time()
+        bot_wins = [[0 for i in range(0, len(team_a_bots))], 
+                    [0 for i in range(0, len(team_b_bots))]]                    
+        bot_scores = deepcopy(bot_wins)
+        bot_games = deepcopy(bot_wins)
+        
+        total_turns = 0
+        for i in range(0, num_games):
+            random_map = SymmetricMap(min_dim=map_dims[0], max_dim=map_dims[1])
+            random_map.random_walk_map()
+
+            # Play all possible matchups between team A and team B
+            
+            status_string = "[map %d] " % i
+            if i > 0:
+                elapsed = time.time() - start_time
+                avg_time = elapsed/i
+                remaining = (num_games-i)*avg_time
+                
+                remaining_str = time.strftime("%H:%M:%S", time.gmtime(remaining))
+                status_string += "%s remaining " % remaining_str
+            else:
+                status_string += "??:??:?? remaining "
+            sys.stdout.write(status_string)
+            sys.stdout.flush()
+            
+            for a in range(0, len(team_a_bots)):
+                for b in range(0, len(team_b_bots)): 
+            
+                    # Run the bots against each other 
+                    self.game.Reset(random_map.map_text())
+                    self.bots = [(0, team_a_bots[a]), (1, team_b_bots[b])]
+                    for botnum, bot in self.bots:
+                        bot.world.L = FakeLogger()
+                    self.Run()
+                    
+                    # Record the scores
+                    if self.game.score[0] > self.game.score[1]:
+                        bot_wins[0][a] += 1
+                    else:
+                        bot_wins[1][b] +=1
+                    bot_scores[0][a] += self.game.score[0]
+                    bot_scores[1][b] += self.game.score[1]
+                    
+                    bot_games[0][a] += 1
+                    bot_games[1][b] += 1
+                    played_games += 1
+                    total_turns += self.game.turn
+                    sys.stdout.write(".")
+                    sys.stdout.flush()
+            
+            a_win_rate = max([float(bot_wins[0][j]) / float(bot_games[0][j]) for j in range(0, len(team_a_bots))]) 
+            b_win_rate = max([float(bot_wins[1][j]) / float(bot_games[1][j]) for j in range(0, len(team_b_bots))])
+            sys.stdout.write(" max A rate: %.2f, max B rate: %.2f\n" % (a_win_rate, b_win_rate))
+            #print elapsed, " - map", i, ": team A bot_scores", str([float(s) for s in bot_scores[0]])
+            #print elapsed, " - map", i, ": team B bot_scores", str([float(s) for s in bot_scores[1]])                                                        
+        
+        elapsed = time.time() - start_time        
+        sum_bots = 0
+        print "Time summary: %.2f s total = %.2f s/game (%.2f turns/game) " % (elapsed, elapsed/played_games, total_turns/played_games)
+        for b in self.bot_time.keys():
+            sum_bots += self.bot_time[b]
+            print "\tbot %s: %.5f s = %.2f%%" % (b, self.bot_time[b], self.bot_time[b]/elapsed*100)     
+        print "\tengine: %.5f s = %.2f%%" % (elapsed-sum_bots, (elapsed-sum_bots)/elapsed*100)
+        
+        return (bot_scores, bot_wins, bot_games)
         
     # Returns a new AntWorld with engine set properly for use by client bots.
     def GetWorld(self):
@@ -181,7 +235,7 @@ class BatchLocalEngine:
         bot.world.L = FakeLogger()
         # Add to internal list for playing the game.
         self.bots.append((b, bot))
-        self.bot_time.append(0)
+        self.bot_time[str(bot.__class__)] = 0
         
     def PrepareGame(self, argv):
         # Parse command line options and fail if unsuccessful.
@@ -192,10 +246,9 @@ class BatchLocalEngine:
         L.debug("Starting local game...")
         L.debug("Using bots: ")
         for b,bot in self.bots:
-            L.debug("\tbot %d (%s): %s" % (b, MapColors[b],str(bot.__class__)))
+            L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
 
         self.game = StepAnts(self.game_opts)
-
         L.debug("Game created.");
 
     # Runs the game until completion. Parses command line options.
@@ -208,8 +261,7 @@ class BatchLocalEngine:
                 break
         
         for b in self.bots:
-            L.info("bot %d (%s): %.02f points" % (b[0],MapColors[b[0]],float(self.game.score[b[0]])))
-#        gui.mainloop()
+            L.info("bot %d: %.02f points" % (b[0], float(self.game.score[b[0]])))
       
     # Tk callback event for stepping through to the next turn.
     def RunTurnCallback(self, event):
@@ -226,7 +278,6 @@ class BatchLocalEngine:
         if self.turn == game.turns or game.game_over():
             L.info("Game finished at turn %d" % self.turn);
             L.info("Game over? " + str(game.game_over()))
-            #gui.quit()
             game.finish_game()
             return 0
     
@@ -268,20 +319,6 @@ class BatchLocalEngine:
             self.turn_phase = 0 
             self.turn += 1
 
-            # Sanity check: make sure that water that is visible actually
-            # was revealed to the player.
-#            for p in range(len(self.bots)):
-#                for row, squares in enumerate(game.vision[p]):
-#                    for col, visible in enumerate(squares): 
-#                        if game.map[row][col] == WATER and visible:
-#                            if (row,col) not in self.water[p]:
-#                                L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
-
-        # Update the map regardless of turn phase. 
-        #self.RenderMap(game.get_perspective(0));
-        
-      
-
     # Sends game states to bots, receives messages, and clears game
     # state for the next turn.
     def SendAndRcvMessages(self):
@@ -305,7 +342,12 @@ class BatchLocalEngine:
                 L.debug("Sending message to bot %d:\n%s" % (b, msg))
                 start_time = time.time()
                 moves = bot._receive(msg)
-                self.bot_time[b] += (time.time() - start_time)
+                elapsed = time.time() - start_time
+                if str(bot.__class__) in self.bot_time.keys():
+                    self.bot_time[str(bot.__class__)] += elapsed
+                else:
+                    self.bot_time[str(bot.__class__)] = elapsed
+                      
                 L.debug("Received moves from bot %d:\n%s" % (b, '\n'.join(moves)))
                 bot_moves.append((b, moves))
 

@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+# Created: October 2011
+# Author: David Weiss
+import random
+import json
+import os.path
+
+from src.antsbot import AntsBot
+from src.worldstate import AIM, AntStatus
+from src.mapgen import SymmetricMap
+from src.features import FeatureExtractor, MovingTowardsFeatures
+from src.state import GlobalState
+               
+class ValueBot(AntsBot):
+    def __init__(self, world, load_file="valuebot.json"):
+        AntsBot.__init__(self, world)
+        self.state = None
+        self.features = None
+        self.weights = None
+        
+        # Try to load saved configuration from file
+        if load_file is not None and os.path.exists(load_file):
+            fp = file(load_file, "r")
+            data = json.load(fp)
+            self.set_features(FeatureExtractor(data['features']))
+            self.set_weights(data['weights'])
+            fp.close()
+            print world.height
+    
+    def save(self, filename):
+        fp = file(filename, "w")
+        data = {'features': self.features.to_dict(), 
+                'weights': self.weights }
+        json.dump(data, fp)
+        fp.close()
+            
+    def __str__(self):
+        s = 'ValueBot:\n'
+        for i in range(self.features.num_features()):
+            s += '\t%s = %g\n' % (self.features.feature_name(i), 
+                                  self.weights[i])
+        return s
+    
+    def set_features(self, extractor):
+        self.features = extractor
+        self.world.L.debug("Setting features: %s" % str(self.features))
+        
+    def set_weights(self, weights):
+        self.weights = weights
+        self.world.L.debug("Setting weights: %s" % str(self.weights))
+        if self.features == None or not len(self.weights) == self.features.num_features():
+            raise AssertionError("Features need to be set before weights!")
+
+    def value(self, state, loc, action):
+        feature_vector = self.features.extract(self.world, state, loc, action)
+        
+        self.world.L.info("Evaluating move: %s, %s:" % (str(loc), action))
+        dot_product = 0
+        for i in range(0, len(feature_vector)):
+            if feature_vector[i]:
+                self.world.L.debug("\tf: %s = %g" % (self.features.feature_name(i), self.weights[i]))
+                dot_product += self.weights[i]
+        self.world.L.info("\tdot_product = %g" % dot_product)
+        
+        return dot_product
+             
+    def get_direction(self, ant):
+
+        # get the passable directions, in random order to break ties
+        rand_dirs = self.world.get_passable_directions(ant.location, AIM.keys())
+        random.shuffle(rand_dirs)
+        
+        # evaluate the value function for each possible direction
+        value = [0 for i in range(0, len(rand_dirs))]
+        max_value = float("-inf")
+        max_dir = None
+        for i in range(0, len(rand_dirs)):
+            value[i] = self.value(self.state, ant.location, rand_dirs[i])
+            if value[i] > max_value:
+                max_value = value[i]
+                max_dir = rand_dirs[i]
+                
+        # take direction with maximum value
+        # Get the first passable direction from that long list.
+        self.world.L.info("Chose: %s, value: %.2f" % (max_dir, max_value))
+        return max_dir
+
+    # Main logic
+    def do_turn(self):
+        # Run the routine for each living ant independently.
+        next_locations = {}
+        
+        # Resolution: 5 squares
+        self.state = GlobalState(self.world, 10)
+        for ant in self.world.ants:
+            if ant.status == AntStatus.ALIVE:
+                ant.direction = self.get_direction(ant)
+                if ant.direction == 'halt' or ant.direction == None:
+                    ant.direction = None
+                else:
+                    # Basic collision detection: don't land on the same square as another friendly ant.
+                    nextpos = self.world.next_position(ant.location, ant.direction) 
+                    if nextpos in next_locations.keys():  
+                        ant.direction = None
+                    else:
+                        next_locations[nextpos] = ant.ant_id
+                                    
+# Set BOT variable to be compatible with rungame.py                            
+BOT = ValueBot
+
+if __name__ == '__main__':
+    from src.localengine import LocalEngine
+    from greedybot import GreedyBot
+    import sys
+    
+    engine = LocalEngine()
+
+    # Load the bot from file
+    if False:    
+        engine.AddBot(ValueBot(engine.GetWorld(), load_file="saved_bots/bot_0.json"))
+    else:
+        # Set completely random weights
+        b = ValueBot(engine.GetWorld(), load_file=None)
+        engine.AddBot(b)        
+        b.set_features(MovingTowardsFeatures())
+        b.set_weights([random.uniform(-1,1) for i in range (0, b.features.num_features())])
+        b.world.L.info("Randomly initialized to:" + str(b))
+        
+    # Add a GreedyBot opponent    
+    engine.AddBot(GreedyBot(engine.GetWorld()))
+    
+    # Generate and play on random 30 x 30 map
+    random_map = SymmetricMap(min_dim=30, max_dim=30)
+    random_map.random_walk_map()
+    fp = file("src/maps/2player/my_random.map", "w")
+    fp.write(random_map.map_text())
+    fp.close()
+    
+    # Run the local debugger
+    engine.Run(sys.argv + ["--run", "-m", "src/maps/2player/my_random.map"])
+
+    
