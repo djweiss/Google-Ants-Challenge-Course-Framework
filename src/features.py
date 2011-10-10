@@ -185,6 +185,7 @@ class CompositingFeatures(FeatureExtractor):
         val =  FeatureExtractor.to_dict(self)
         val['base_f'] = self.base_f.to_dict()
         val['qual_f'] = self.qual_f.to_dict()
+        return val
         
     def compute_feature_names(self):
         """ Compute the list of feature names from the composition of base_f and qual_f. The
