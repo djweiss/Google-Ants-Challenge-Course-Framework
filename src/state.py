@@ -93,7 +93,7 @@ class GlobalState:
         self.visited_res = int(min(self.world.height/visited_cells, self.world.width/visited_cells))
         self.visited = {}
 
-        self.draw_heatmap = True
+        self.draw_heatmap = False
                 
         self.update()
         

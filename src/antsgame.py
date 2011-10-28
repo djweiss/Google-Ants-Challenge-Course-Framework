@@ -660,6 +660,11 @@ class Ants(Game):
             )
 
             if len(nearby_players) == 1:
+                # tag ants as eaters of food
+                nearby_ants = self.nearby_ants(f_loc, self.spawnradius)
+                for ant in nearby_ants:
+                    ant.food_amt = Fraction(1,len(nearby_ants))
+                
                 # spawn food because there is only one player near the food
                 food = self.remove_food(f_loc)
                 new_ant_locations.append((food, nearby_players.pop()))
@@ -846,6 +851,7 @@ class Ants(Game):
             self.kill_ant(ant)
             score_share = len(nearby_enemies[ant])
             for enemy in nearby_enemies[ant]:
+                enemy.kill_amt = Fraction(1, score_share)
                 self.score[enemy.owner] += Fraction(1, score_share)
 
     def do_attack_closest(self):
@@ -1210,6 +1216,9 @@ class Ants(Game):
                 self.score[player] += food_bonus
             # separate bonus from score history
             self.bonus[player] = food_bonus
+            
+        # reset all fields in case game is reused
+        0;
 
     def start_turn(self):
         """ Called by engine at the start of the turn """
@@ -1414,6 +1423,10 @@ class Ant:
         self.die_turn = None
         self.orders = []
         self.killed = False
+        
+        # extra event flags for rewards in reinforcement learning
+        self.food_amt = 0
+        self.kill_amt = 0
 
     def __str__(self):
         return '(%s, %s, %s, %s, %s)' % (self.initial_loc, self.owner, self.spawn_turn, self.die_turn, ''.join(self.orders))

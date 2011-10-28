@@ -22,7 +22,7 @@ class AntsBot(object):
     def reset(self):
         pass    
 
-    def _receive(self, msg):
+    def _receive(self, msg, engine_ants=None):
         '''Parses message from the server/engine and returns output.'''
         lines = msg.splitlines()
         if lines[-1].lower() == 'ready':
@@ -30,7 +30,7 @@ class AntsBot(object):
             return self.world._finish_turn()
 
         elif lines[-1].lower() == 'go':
-            self.world._update('\n'.join(lines[:-1]))
+            self.world._update('\n'.join(lines[:-1]),engine_ants)
             self.do_turn()
             return self.world._finish_turn()
         

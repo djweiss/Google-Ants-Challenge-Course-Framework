@@ -42,7 +42,14 @@ AIM = {'n': (-1, 0),
        'e': (0, 1),
        's': (1, 0),
        'w': (0, -1),
-       'halt': (0,0)}
+       'halt': (0,0),
+       None: (0,0)}
+
+class RewardEvents:
+    def __init__(self):
+        self.food_eaten = 0
+        self.death_dealt = 0
+        self.was_killed = False
 
 class AntStatus:
     '''Enum type to represent persistent ant status.'''
@@ -153,7 +160,7 @@ class AntWorld(object):
         self.L.debug("World state initialized")
 
     # _updates a world state based on data from the engine/server.
-    def _update(self, data):
+    def _update(self, data, engine_ants):
         if self.debug_mode:
             self.L.debug("Updating world state:")
 
@@ -174,7 +181,7 @@ class AntWorld(object):
 
         # This dictionary will store a list of friendly ants communicated
         # by the server; if an ant doesn't show up on this list, then it
-        # should dead, otherwise we have no idea what happened to it.
+        # should be dead, otherwise we have no idea what happened to it.
         check_ants = {}
 
         if self.stateless:
@@ -225,6 +232,45 @@ class AntWorld(object):
         
         if not self.stateless:
             self._track_friendlies(check_ants)
+            self._join_with_engine_ants(engine_ants)
+            
+#            for a in self.ants:
+#                self.L.debug("\nAnt #%d ---------------" % a.ant_id)
+#                self.L.debug('died = %d' % a.died)
+#                self.L.debug('food_amt = %s' % str(a.food_amt))
+#                self.L.debug('kill_amt = %s' % str(a.kill_amt))
+#                self.L.debug('location = %s' % str(a.location))
+#                self.L.debug('direction = %s' % a.direction)
+        
+        
+    def _join_with_engine_ants(self,engine_ants):
+        loc2id = {}        
+        for ant in self.ants:
+            loc2id[ant.location] = ant.ant_id
+            
+        # sanity check: make sure there is a one-to-one mapping of check_ants and engine_ants
+        claimed_spots = {}
+        for i,engine_ant in zip(range(len(engine_ants)),engine_ants):
+            if engine_ant.loc not in loc2id:
+                self.L.error("Engine thinks ant at %s, but worldstate has no such ant!" % str(engine_ant.loc))
+            elif engine_ant.loc in claimed_spots:
+                self.L.error("Engine thinks 2 ants in spot %s: %d and %d!" % (str(engine_ant.loc),claimed_spots[engine_ant.loc],i))
+            else:
+                claimed_spots[engine_ant.loc] = i
+                
+                
+        # if everything is ok, copy over synced info for learning
+        for engine_ant in engine_ants:
+            ant = self.ants[loc2id[engine_ant.loc]]
+            ant.previous_reward_events = RewardEvents()
+            ant.previous_reward_events.food_eaten = engine_ant.food_amt
+            ant.previous_reward_events.death_dealt = engine_ant.kill_amt
+            ant.previous_reward_events.was_killed = (ant.status == AntStatus.DEAD)
+                        
+             
+                
+        
+                
 
     def _track_friendlies(self, check_ants):
         # Track friendly living ants.
@@ -316,7 +362,7 @@ class AntWorld(object):
 
         # Check for invalid direction.
         for a in self.ants:
-            if a.direction != None and a.direction not in  ['n','s','e','w']:
+            if a.direction != None and a.direction not in  AIM.keys():
                 raise AssertionError("%s is not a valid direction!" % a.direction)
             
         # Only send orders for alive, moving ants.

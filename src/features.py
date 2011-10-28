@@ -15,8 +15,8 @@ class FeatureExtractor:
         ''' Create a new FeatureExtractor from a dict object.'''
         
         new_type = input_dict['_type']
-        if new_type == MovingTowardsFeatures.type_name: 
-            self.__class__ = MovingTowardsFeatures
+        if new_type == BasicFeatures.type_name: 
+            self.__class__ = BasicFeatures
         elif new_type == QualifyingFeatures.type_name:
             self.__class__ = QualifyingFeatures
         elif new_type == CompositingFeatures.type_name:
@@ -71,22 +71,37 @@ class FeatureExtractor:
         
         raise NotImplementedError
 
-class MovingTowardsFeatures(FeatureExtractor):
+class BasicFeatures(FeatureExtractor):
     """Very basic features.
     
     Computes three features: whether or not a given action takes an ant nearer to its closest
     enemy, food, or friendly ant.
     """
     
-    type_name = 'MovingTowards'
+    type_name = 'Basic'
        
     def init_from_dict(self, input_dict):
+        
         self.feature_names.append("Moving Towards Closest Enemy")
         self.feature_names.append("Moving Towards Closest Food")
         self.feature_names.append("Moving Towards Friendly")
+       
+        self.feature_names.append("Friendly adjacent")
+
+        self.feature_names.append("Closest food 1 away")
+        self.feature_names.append("Closest food 2 away")
+        self.feature_names.append("Closest food 3 away")
+        self.feature_names.append("Closest food 4 away")
+        self.feature_names.append("Closest food > 4 away")
+        
+        self.feature_names.append("Closest enemy 1 away")
+        self.feature_names.append("Closest enemy 2 away")
+        self.feature_names.append("Closest enemy 3 away")
+        self.feature_names.append("Closest enemy 4 away")
+        self.feature_names.append("Closest enemy >4 away")
 
     def __init__(self):
-        FeatureExtractor.__init__(self, {'_type': MovingTowardsFeatures.type_name})    
+        FeatureExtractor.__init__(self, {'_type': BasicFeatures.type_name})    
                 
     def moving_towards(self, world, loc1, loc2, target):
         """Returns true if loc2 is closer to target than loc1 in manhattan distance."""
@@ -134,6 +149,30 @@ class MovingTowardsFeatures(FeatureExtractor):
             f.append(False)
         else:
             f.append(self.moving_towards(world, loc, next_loc, friend_loc));
+            
+        # adjacent friendly
+        if friend_loc is None:
+            f.append(False)
+        else:
+            f.append(world.manhattan_distance(next_loc,friend_loc)==1)
+            
+        # closest food {1,2,3,4} away
+        if food_loc is None:
+            f += [False]*5
+        else:
+            d_food = world.manhattan_distance(next_loc,food_loc)
+            for k in range(1,5):
+                f.append(d_food == k)
+            f.append(d_food > 4)
+                
+        # closest enemy {1,2,3,4} away
+        if enemy_loc is None:
+            f += [False]*5
+        else:
+            d_enemy = world.manhattan_distance(next_loc,enemy_loc)
+            for k in range(1,5):
+                f.append(d_enemy == k)
+            f.append(d_enemy > 4)
         
         return f
     
@@ -151,11 +190,43 @@ class QualifyingFeatures(FeatureExtractor):
         pass
         
     def init_from_dict(self, input_dict):
-        raise NotImplementedError
+        self.feature_names.append("Moving Towards Closest Enemy")
+        self.feature_names.append("Moving Towards Closest Food")
+        self.feature_names.append("Moving Towards Friendly")
     
     def extract(self, world, state, loc, action):
-        raise NotImplementedError
+        """Extract the three simple features."""
+        
+        food_loc = self.find_closest(world, loc, state.lookup_nearby_food(loc))
+        enemy_loc = self.find_closest(world, loc, state.lookup_nearby_enemy(loc))
+        friend_loc = self.find_closest(world, loc, state.lookup_nearby_friendly(loc))
 
+        next_loc = world.next_position(loc, action)
+        world.L.debug("loc: %s, food_loc: %s, enemy_loc: %s, friendly_loc: %s" % (str(loc), str(food_loc), str(enemy_loc), str(friend_loc)))
+        # Feature vector        
+        f = list()
+        
+        # Moving towards enemy
+        if enemy_loc is None:
+            f.append(False)
+        else:
+            f.append(self.moving_towards(world, loc, next_loc, enemy_loc));
+        
+        # Moving towards food
+        if food_loc is None:
+            f.append(False)
+        else:
+            f.append(self.moving_towards(world, loc, next_loc, food_loc));
+        
+        # Moving towards friendly
+        if friend_loc is None:
+            f.append(False)
+        else:
+            f.append(self.moving_towards(world, loc, next_loc, friend_loc));
+        
+        return f
+    
+    
 class CompositingFeatures(FeatureExtractor):
     """Generates new features from new existing FeatureExtractors.
     
@@ -199,12 +270,20 @@ class CompositingFeatures(FeatureExtractor):
                 
         """
         self.feature_names.extend(self.base_f.feature_names)
+#        for i in range(len(self.base_f.feature_names)):
+#            self.feature_names.append('NOT ' + self.base_f.feature_names[i])
+        for i in range(len(self.base_f.feature_names)):
+            for j in range(len(self.qual_f.feature_names)):
+                self.feature_names.append(self.base_f.feature_names[i] + '+' + self.qual_f.feature_names[j])
         
-        raise NotImplementedError
     
     def extract(self, world, state, loc, action):
         """Extracts the combination of features according to the ordering defined by compute_feature_names()."""
-        raise NotImplementedError
-
-
-                       
+        feats1 = self.base_f.extract(world, state, loc, action)
+        feats2 = self.qual_f.extract(world, state, loc, action)
+        f = [ff*1.0 for ff in feats1]
+        for f1 in feats1:
+            for f2 in feats2:
+                f.append(1.0*f1*f2)
+                
+        return f

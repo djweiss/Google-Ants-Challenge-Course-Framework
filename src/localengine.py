@@ -49,7 +49,7 @@ from antsgame import * # Importing * is required to get all of the
 PLAY_SPEED_MS = 10 #adjust as needed
 GAMELOG_BOTNUM = -1 #hacky hack hackerson
 # Whether or not to crash the entire game upon invalid moves
-STRICT_MODE = True
+STRICT_MODE = False
 
 global gui
 gui = Frame()    # This is the Tk master object from which all GUI
@@ -180,8 +180,8 @@ class LocalEngine:
         gui.master.lift()
 
         # Set up callbacks for user input.
-        gui.bind_all("<KeyPress-Return>", self.RunTurnCallback)
-        gui.bind_all("<KeyPress-q>", self.QuitGameCallback)
+#        gui.bind_all("<KeyPress-Return>", self.RunTurnCallback)
+#        gui.bind_all("<KeyPress-q>", self.QuitGameCallback)
 
         # Create a logging window for the main server.
         #HACK! but w/e 
@@ -214,7 +214,7 @@ class LocalEngine:
         self.bots.append((b, bot))
 
     # Runs the game until completion. Parses command line options.
-    def Run(self, argv):
+    def Run(self, run_mode, argv):
 
         # Parse command line options and fail if unsuccessful.
         self.game_opts = self.GetOptions(argv)
@@ -238,13 +238,16 @@ class LocalEngine:
         
         self.InitControls()
         gui.master.lift()
-        if self.game_opts['step_through']:
+        if run_mode == 'step':
             gui.mainloop()
-        else:
+        elif run_mode == 'play' or run_mode == 'batch': 
             while 1: 
-                gui.update()
-                if self.RunTurn() == 0:
+                if run_mode == 'play':
+                    gui.update()
+                if self.RunTurn(run_mode == 'play') == 0:
                     break
+        else:
+            raise NotImplementedError
         
         print "*"*20
         print "Game Summary"
@@ -252,9 +255,7 @@ class LocalEngine:
         for b in self.bots:
             print "bot %d (%s): %.02f points" % (b[0],MapColors[b[0]],float(self.game.score[b[0]]))
         print "-"*20
-#        gui.mainloop()
-    
-      
+              
 
 
     def InitControls(self):
@@ -263,9 +264,9 @@ class LocalEngine:
         step = Button(self.controls_frame, text='Step', \
                       command=self.RunTurnCallback)
         step.grid(row=0, column=0)
-        playpause = Button(self.controls_frame, text='Play/Pause', \
-                           command=self.PlayPauseGameCallback)
-        playpause.grid(row=0, column=1)
+#        playpause = Button(self.controls_frame, text='Play/Pause', \
+#                           command=self.PlayPauseGameCallback)
+#        playpause.grid(row=0, column=1)
         self.controls_frame.grid(row=1, column=0)
 
     # Draws the rectangles on the Map GUI window that will be used to
@@ -396,12 +397,14 @@ class LocalEngine:
         self.PlayUntilStopped()
         
     def PlayUntilStopped(self):
+        raise NotImplementedError
+    
         if self.play_is_on:
             self.RunTurnCallback()
             gui.after(PLAY_SPEED_MS, self.PlayUntilStopped)
 
     # Steps through 1/2 of a turn.
-    def RunTurn(self):
+    def RunTurn(self, draw_map):
         game = self.game  # shortcut
 
         if self.turn == game.turns or game.game_over():
@@ -409,6 +412,7 @@ class LocalEngine:
             L.info("Game over? " + str(game.game_over()))
             gui.quit()
             game.finish_game()
+            
             return 0
     
         # Initial turn is a special case. 
@@ -438,9 +442,14 @@ class LocalEngine:
 
         else: # Combat, food, etc. resolution phase
             
+            # clean slate
+            for a in self.game.all_ants:
+                a.food_amt = 0
+                a.kill_amt = 0
+            
             # Finish game turn logic.
             game.FinishTurnResolve()
-
+            
             # Again, keep track of revealed water for bugfinding.
             for p in range(len(self.bots)):
                 self.water[p] = self.water[p] + game.revealed_water[p]
@@ -459,7 +468,8 @@ class LocalEngine:
                                 L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
 
         # Update the map regardless of turn phase. 
-        self.RenderMap(game.get_perspective(0));
+        if draw_map:
+            self.RenderMap(game.get_perspective(0));
         
       
 
@@ -478,12 +488,14 @@ class LocalEngine:
                 msg = game.get_player_start(b) + 'ready\n'
             else:
                 msg = game.get_player_state(b) + 'go\n'
+                
+            ants_b = self.game.player_ants(b)
 
             # Send message and receive reply.
             if game.is_alive(b):
                 L.debug("Bot %d is alive" % b)
                 L.debug("Sending message to bot %d:\n%s" % (b, msg))
-                moves = bot._receive(msg)
+                moves = bot._receive(msg,ants_b)
                 L.debug("Received moves from bot %d:\n%s" % (b, '\n'.join(moves)))
                 bot_moves.append((b, moves))
 
