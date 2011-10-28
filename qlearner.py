@@ -46,6 +46,11 @@ class QLearnBot(ValueBot):
                     next_locations[nextpos] = ant.ant_id
                         
     def do_turn(self):
+      """
+        do_turn just does some bookkeeping and calls the update+explore/exploit 
+        loop for each living or just killed ant.  You shouldn't need to modify 
+        this function.
+      """
         
         # Grid lookup resolution: size 10 squares
         if self.state == None:
@@ -71,6 +76,8 @@ class QLearnBot(ValueBot):
         """
             Perform an update of the weights here according to the Q-learning
             weight update rule described in the homework handout.
+
+            YOUR CODE HERE
         """
         for i in range(len(self.weights)):
             self.weights[i] += 0xdeadbeef
