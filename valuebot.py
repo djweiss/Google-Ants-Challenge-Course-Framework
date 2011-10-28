@@ -8,7 +8,7 @@ import os.path
 from src.antsbot import AntsBot
 from src.worldstate import AIM, AntStatus
 from src.mapgen import SymmetricMap
-from src.features import FeatureExtractor, MovingTowardsFeatures
+from src.features import FeatureExtractor, BasicFeatures
 from src.state import GlobalState
                
 class ValueBot(AntsBot):
@@ -34,7 +34,7 @@ class ValueBot(AntsBot):
         self.weights = None
         
         # **** NOTE: Disable ant tracking to speed up game playing. 
-        self.world.stateless = True
+        self.world.stateless = False
         
         # Try to load saved configuration from file
         if load_file is not None and os.path.exists(load_file):
@@ -51,6 +51,16 @@ class ValueBot(AntsBot):
         data = {'features': self.features.to_dict(), 
                 'weights': self.weights }
         json.dump(data, fp)
+        fp.close()
+        
+        
+    def save_readable(self, filename):
+        """Save features and weights to file."""
+        
+        fp = file(filename, "w")
+        fp.write(str(self))
+        0
+        
         fp.close()
             
     def __str__(self):
@@ -79,13 +89,13 @@ class ValueBot(AntsBot):
         
         feature_vector = self.features.extract(self.world, state, loc, action)
         
-        self.world.L.info("Evaluating move: %s, %s:" % (str(loc), action))
+#        self.world.L.info("Evaluating move: %s, %s:" % (str(loc), action))
         dot_product = 0
         for i in range(0, len(feature_vector)):
             if feature_vector[i]:
-                self.world.L.info("\tf: %s = %g" % (self.features.feature_name(i), self.weights[i]))
+#                self.world.L.info("\tf: %s = %g" % (self.features.feature_name(i), self.weights[i]))
                 dot_product += self.weights[i]
-        self.world.L.info("\tdot_product = %g" % dot_product)
+#        self.world.L.info("\tdot_product = %g" % dot_product)
         
         return dot_product
              
@@ -151,15 +161,7 @@ if __name__ == '__main__':
     engine = LocalEngine()
 
     # Load the bot from file
-    if False:    
-        engine.AddBot(ValueBot(engine.GetWorld(), load_file="saved_bots/bot_0.json"))
-    else:
-        # Set completely random weights
-        b = ValueBot(engine.GetWorld(), load_file=None)
-        engine.AddBot(b)        
-        b.set_features(MovingTowardsFeatures())
-        b.set_weights([random.uniform(-1,1) for i in range (0, b.features.num_features())])
-        b.world.L.info("Randomly initialized to:" + str(b))
+    engine.AddBot(ValueBot(engine.GetWorld(), load_file="saved_bots/qbot.json"))
         
     # Add a GreedyBot opponent    
     engine.AddBot(GreedyBot(engine.GetWorld()))
@@ -172,6 +174,6 @@ if __name__ == '__main__':
     fp.close()
     
     # Run the local debugger
-    engine.Run(sys.argv + ["--run", "-m", "src/maps/2player/my_random.map"])
+    engine.Run('play',sys.argv + ["--run", "-m", "src/maps/2player/my_random.map"])
 
     
