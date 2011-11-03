@@ -162,7 +162,7 @@ if __name__ == '__main__':
             # init qbot with weights 0
             qbot = QLearnBot(engine.GetWorld(), load_file=None)
             qbot.set_features(CompositingFeatures(BasicFeatures(), BasicFeatures()))
-            qbot.set_weights([0 for i in range (0, qbot.features.num_features())])
+            qbot.set_weights([0 for j in range (0, qbot.features.num_features())])
             
         # Generate and play on random 30 x 30 map
         random_map = SymmetricMap(min_dim=50, max_dim=50)
