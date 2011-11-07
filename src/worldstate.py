@@ -23,6 +23,7 @@
 import random
 import sys
 import traceback
+import time
 
 from logutil import *
 
@@ -99,7 +100,18 @@ class AntWorld(object):
         self.width = None
         self.height = None
         self.map = None
+
+        self.turntime = 0
+        self.loadtime = 0
+        self.viewradius2 = 0
+        self.attackradius2 = 0
+        self.spawnradius2 = 0      
+        self.turns = 0
         
+        self.turn_start_time = None
+                
+        self.hill_list = {}
+
         # Lookup tables for enemies, friendly ants, and food.
         self.enemy_dict = {}
         self.food = []
@@ -141,7 +153,9 @@ class AntWorld(object):
                     self.attackradius2 = int(tokens[1])
                 elif key == 'spawnradius2':
                     self.spawnradius2 = int(tokens[1])
-
+                elif key == 'turns':
+                    self.turns = int(tokens[1])
+                    
         # Initialize all land map.
         self.map = [[LAND for col in range(self.width)]
                                 for row in range(self.height)]
@@ -154,9 +168,13 @@ class AntWorld(object):
 
     # _updates a world state based on data from the engine/server.
     def _update(self, data):
+        
+        # start timer
+        self.turn_start_time = time.time()
+        
         if self.debug_mode:
             self.L.debug("Updating world state:")
-
+        
         # Clear map of last turn's friendly ants.
         for row, col in [ant.location for ant in self.ants]:
             self.map[row][col] = LAND
@@ -168,6 +186,7 @@ class AntWorld(object):
                 self.map[row][col] = LAND
 
         # Reset food, enemy, and dead body locations.
+        self.hill_list = {}
         self.food = []
         self.enemy_dict = {}
         self.dead_dict = {}
@@ -220,11 +239,22 @@ class AntWorld(object):
                         if self.debug_mode:
                             self.L.debug("RCV WATER at %d,%d" % (row,col))
                     elif tokens[0] == 'd': # dead body found
-                        self.map[row][col] = DEAD
-                        self.dead_dict[(row,col)] = True
+                         # food could spawn on a spot where an ant just died
+                         # don't overwrite the space unless it is land
+                         if self.map[row][col] == LAND:
+                             self.map[row][col] = DEAD
+                             # but always add to the dead list
+                             self.dead_dict[(row, col)] = 1;
+                    elif tokens[0] == 'h':
+                        owner = int(tokens[3])
+                        self.hill_list[(row, col)] = owner                          
+                             
         
         if not self.stateless:
             self._track_friendlies(check_ants)
+
+    def time_remaining(self):
+        return self.turntime - int(1000 * (time.time() - self.turn_start_time))
 
     def _track_friendlies(self, check_ants):
         # Track friendly living ants.
@@ -337,8 +367,18 @@ class AntWorld(object):
     def enemies(self):
         return self.enemy_dict.keys()
 
+    def my_hills(self):
+        '''Get the locations of my own ant hills.'''
+        return [loc for loc, owner in self.hill_list.items()
+                    if owner == MY_ANT]
+
+    def enemy_hills(self):
+        '''Get the locations of enemy ant hills.'''
+        return [(loc, owner) for loc, owner in self.hill_list.items()
+                    if owner != MY_ANT]
+
     def passable(self, loc):
-        return self.map[loc[0]][loc[1]] > WATER
+        return self.map[loc[0]][loc[1]] != WATER
     
     def unoccupied(self, loc):
         row,col = loc

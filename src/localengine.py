@@ -34,7 +34,7 @@ import os
 import tkFont
 
 from Tkinter import *
-from optparse import OptionParser
+from optparse import OptionParser, OptionGroup
 from math import sqrt,floor
 from collections import deque, defaultdict
 from fractions import Fraction
@@ -63,49 +63,54 @@ MapColors = [
             'orange', # ant color 4
             'magenta', # ant color 5
             'cyan', # ant color 6
+            'cyan', # ant color 7
+            'cyan', # ant color 8
+            'cyan', # ant color 9
+            'cyan', # ant color 10            
+            '#f66', # ant hill                         
             '#000', # unseen
-            '#fee', # conflict(?)
             '#88f', # water
             '#fff', # food
             '#666', # land
+            '#fee', # dead 
 ]
 
 # A slightly modified version of the original Ants game from
 # antsgame.py: this breaks up the finish_turn() method of the original
 # Ants into two separate functions: FinishTurnMoves() and
-# FinishTurnResolve(), which are explained above.
-class StepAnts(Ants):
-    def __init__(self, options=None):
-        Ants.__init__(self, options)
-      
-    def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
-        # Determine players alive at the start of the turn.  Only these
-        # players will be able to score this turn.
-        self.was_alive = set(i for i in range(self.num_players) if self.is_alive(i))
-        self.do_orders()
-
-    def FinishTurnResolve(self): # Content copied from Ants.finish_turn()
-        # Run attack, food, etc. resolution and scoring.
-        self.do_attack()
-        self.do_spawn()
-        self.food_extra += Fraction(self.food_rate * self.num_players, self.food_turn)
-        food_now = self.food_extra // self.num_players
-        self.food_extra %= self.num_players
-        self.do_food(food_now)
-
-        # Computes scores for each player.
-        for i, s in enumerate(self.score):
-            if i in self.was_alive:
-                # Update score for those were alive at the START of the turn.
-                self.score_history[i].append(s)
-            else:
-                # Otherwise undo any changes to their score made during this
-                # turn.
-                self.score[i] = self.score_history[i][-1]
-                
-        # Since all the ants have moved we can update the vision.
-        self.update_vision()
-        self.update_revealed()
+## FinishTurnResolve(), which are explained above.
+#class StepAnts(Ants):
+#    def __init__(self, options=None):
+#        Ants.__init__(self, options)
+#      
+#    def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
+#        # Determine players alive at the start of the turn.  Only these
+#        # players will be able to score this turn.
+#        self.was_alive = set(i for i in range(self.num_players) if self.is_alive(i))
+#        self.do_orders()
+#
+#    def FinishTurnResolve(self): # Content copied from Ants.finish_turn()
+#        # Run attack, food, etc. resolution and scoring.
+#        self.do_attack()
+#        self.do_spawn()
+#        self.food_extra += Fraction(self.food_rate * self.num_players, self.food_turn)
+#        food_now = self.food_extra // self.num_players
+#        self.food_extra %= self.num_players
+#        self.do_food(food_now)
+#
+#        # Computes scores for each player.
+#        for i, s in enumerate(self.score):
+#            if i in self.was_alive:
+#                # Update score for those were alive at the START of the turn.
+#                self.score_history[i].append(s)
+#            else:
+#                # Otherwise undo any changes to their score made during this
+#                # turn.
+#                self.score[i] = self.score_history[i][-1]
+#                
+#        # Since all the ants have moved we can update the vision.
+#        self.update_vision()
+#        self.update_revealed()
 
 class LogWindow():#Toplevel):
 
@@ -226,7 +231,7 @@ class LocalEngine:
         for b,bot in self.bots:
             L.debug("\tbot %d (%s): %s" % (b, MapColors[b],str(bot.__class__)))
 
-        self.game = StepAnts(self.game_opts)
+        self.game = Ants(self.game_opts)
 
         L.debug("Game created.");
 
@@ -238,13 +243,14 @@ class LocalEngine:
         
         self.InitControls()
         gui.master.lift()
-        if self.game_opts['step_through']:
-            gui.mainloop()
-        else:
-            while 1: 
-                gui.update()
-                if self.RunTurn() == 0:
-                    break
+        gui.mainloop()
+#        if self.game_opts['step_through']:
+#        
+#        else:
+#            while 1: 
+#                gui.update()
+#                if self.RunTurn() == 0:
+#                    break
         
         print "*"*20
         print "Game Summary"
@@ -272,8 +278,11 @@ class LocalEngine:
     # represent game state.
     def InitMap(self, map_frame):
 
-        mx = self.game.width*20 # Map window dimensions
-        my = self.game.height*20
+        pix_size = min(20, 1000/self.game.width);
+        pix_size = min(pix_size, 1000/self.game.height);
+        
+        mx = self.game.width*pix_size # Map window dimensions
+        my = self.game.height*pix_size
         rx = mx / (self.game.width+2) # Rectangle dimensions
         ry = my / (self.game.height+2)
 
@@ -313,7 +322,13 @@ class LocalEngine:
                 # TODO For some reason, sometimes the mapdata gets assigned
                 # None and this was causing the code to crash.
                 if mapdata[i][j] != None:
-                   color = MapColors[mapdata[i][j]]
+                    
+                    if mapdata[i][j] >= 10 and mapdata[i][j] < 18:
+                        mapdata[i][j] = mapdata[i][j] % 10;                        
+                    elif mapdata[i][j] >= 18:
+                        mapdata[i][j] = 10                        
+
+                    color = MapColors[mapdata[i][j]]
                 else:
                     L.error("mapdata[%d][%d] is None" % (i,j))
 
@@ -427,41 +442,45 @@ class LocalEngine:
             # Turn 0 is over. Now 1/2 phase turns can begin.
             self.turn += 1
 
-        if self.turn_phase == 0: # Movement phase, beginning of turn
-            L.debug("Starting turn: %d" % self.turn)
 
-            # Send game state from last turn to bots and get messages.
-            self.SendAndRcvMessages()        
-            game.FinishTurnMoves()
-
-            self.turn_phase = 1
-
-        else: # Combat, food, etc. resolution phase
-            
-            # Finish game turn logic.
-            game.FinishTurnResolve()
-
-            # Again, keep track of revealed water for bugfinding.
-            for p in range(len(self.bots)):
-                self.water[p] = self.water[p] + game.revealed_water[p]
-            
-            # Reset turn phase and advance turn.
-            self.turn_phase = 0 
-            self.turn += 1
+        L.debug("Starting turn: %d" % self.turn)
+        self.SendAndRcvMessages()
+        game.finish_turn()
+#                
+#        if self.turn_phase == 0: # Movement phase, beginning of turn
+#        
+#
+#            # Send game state from last turn to bots and get messages.
+#        
+#            game.FinishTurnMoves()
+#
+#            self.turn_phase = 1
+#
+#        else: # Combat, food, etc. resolution phase
+#            
+#            # Finish game turn logic.
+#            game.FinishTurnResolve()
+#
+#            # Again, keep track of revealed water for bugfinding.
+        for p in range(len(self.bots)):
+           self.water[p] = self.water[p] + game.revealed_water[p]
+#            
+#            # Reset turn phase and advance turn.
+#            self.turn_phase = 0 
+    
+        self.turn += 1
 
             # Sanity check: make sure that water that is visible actually
             # was revealed to the player.
-            for p in range(len(self.bots)):
-                for row, squares in enumerate(game.vision[p]):
-                    for col, visible in enumerate(squares): 
-                        if game.map[row][col] == WATER and visible:
-                            if (row,col) not in self.water[p]:
-                                L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
+        for p in range(len(self.bots)):
+            for row, squares in enumerate(game.vision[p]):
+                for col, visible in enumerate(squares): 
+                    if game.map[row][col] == WATER and visible:
+                        if (row,col) not in self.water[p]:
+                            L.error("water square %d,%d is visible to player %d but not revealed" % (row,col,p))
 
         # Update the map regardless of turn phase. 
         self.RenderMap(game.get_perspective(0));
-        
-      
 
     # Sends game states to bots, receives messages, and clears game
     # state for the next turn.
@@ -551,22 +570,42 @@ class LocalEngine:
                                             help="Engine seed for the random number generator")
         
         # ants specific game options
-        parser.add_option("--attack", dest="attack",
-                                            default="power",
-                                            help="Attack method to use for engine. (closest, power, support, damage)")
-        parser.add_option("--food", dest="food",
-                                            default="symmetric",
-                                            help="Food spawning method. (none, random, sections, symmetric)")
-        parser.add_option("--viewradius2", dest="viewradius2",
-                                            default=55, type="int",
-                                            help="Vision radius of ants squared")
-        parser.add_option("--spawnradius2", dest="spawnradius2",
-                                            default=1, type="int",
-                                            help="Spawn radius of ants squared")
-        parser.add_option("--attackradius2", dest="attackradius2",
-                                            default=5, type="int",
-                                            help="Attack radius of ants squared")
-
+              # ants specific game options
+        game_group = OptionGroup(parser, "Game Options", "Options that affect the game mechanics for ants")
+        game_group.add_option("--attack", dest="attack",
+                              default="focus",
+                              help="Attack method to use for engine. (closest, focus, support, damage)")
+        game_group.add_option("--kill_points", dest="kill_points",
+                              default=2, type="int",
+                              help="Points awarded for killing a hill")
+        game_group.add_option("--food", dest="food",
+                              default="symmetric",
+                              help="Food spawning method. (none, random, sections, symmetric)")
+        game_group.add_option("--viewradius2", dest="viewradius2",
+                              default=77, type="int",
+                              help="Vision radius of ants squared")
+        game_group.add_option("--spawnradius2", dest="spawnradius2",
+                              default=1, type="int",
+                              help="Spawn radius of ants squared")
+        game_group.add_option("--attackradius2", dest="attackradius2",
+                              default=5, type="int",
+                              help="Attack radius of ants squared")
+        game_group.add_option("--food_rate", dest="food_rate", nargs=2, type="int", default=(5,11),
+                              help="Numerator of food per turn per player rate")
+        game_group.add_option("--food_turn", dest="food_turn", nargs=2, type="int", default=(19,37),
+                              help="Denominator of food per turn per player rate")
+        game_group.add_option("--food_start", dest="food_start", nargs=2, type="int", default=(75,175),
+                              help="One over percentage of land area filled with food at start")
+        game_group.add_option("--food_visible", dest="food_visible", nargs=2, type="int", default=(3,5),
+                              help="Amount of food guaranteed to be visible to starting ants")
+        game_group.add_option("--cutoff_turn", dest="cutoff_turn", type="int", default=150,
+                              help="Number of turns cutoff percentage is maintained to end game early")
+        game_group.add_option("--cutoff_percent", dest="cutoff_percent", type="float", default=0.85,
+                              help="Number of turns cutoff percentage is maintained to end game early")
+        game_group.add_option("--scenario", dest="scenario",
+                              action='store_true', default=False)
+        parser.add_option_group(game_group)
+        
         (opts, args) = parser.parse_args(argv)
         if opts.runlocal != True:
             parser.print_help()
@@ -580,19 +619,29 @@ class LocalEngine:
 
         # Load map data
         game_options = {
-                "map": opts.map,
-                "attack": opts.attack,
-                "food": opts.food,
-                "viewradius2": opts.viewradius2,
-                "attackradius2": opts.attackradius2,
-                "spawnradius2": opts.spawnradius2,
-                "loadtime": opts.loadtime,
-                "turntime": opts.turntime,
-                "turns": opts.turns,
-                "player_seed": opts.player_seed,
-                "engine_seed": opts.engine_seed,
-                "step_through": opts.step_through }
+            "map": opts.map,
+            "attack": opts.attack,
+            "kill_points": opts.kill_points,
+            "food": opts.food,
+            "viewradius2": opts.viewradius2,
+            "attackradius2": opts.attackradius2,
+            "spawnradius2": opts.spawnradius2,
+            "loadtime": opts.loadtime,
+            "turntime": opts.turntime,
+            "turns": opts.turns,
+            "food_rate": opts.food_rate,
+            "food_turn": opts.food_turn,
+            "food_start": opts.food_start,
+            "food_visible": opts.food_visible,
+            "cutoff_turn": opts.cutoff_turn,
+            "cutoff_percent": opts.cutoff_percent,
+            "scenario": opts.scenario }
 
+        if opts.player_seed != None:
+            game_options['player_seed'] = opts.player_seed
+        if opts.engine_seed != None:
+            game_options['engine_seed'] = opts.engine_seed
+                
         with open(opts.map, 'r') as map_file:
             game_options['map'] = map_file.read()
 
