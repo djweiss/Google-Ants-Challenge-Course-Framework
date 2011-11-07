@@ -46,11 +46,11 @@ class QLearnBot(ValueBot):
                     next_locations[nextpos] = ant.ant_id
                         
     def do_turn(self):
-      """
+        """
         do_turn just does some bookkeeping and calls the update+explore/exploit 
         loop for each living or just killed ant.  You shouldn't need to modify 
         this function.
-      """
+        """
         
         # Grid lookup resolution: size 10 squares
         if self.state == None:
@@ -144,42 +144,43 @@ if __name__ == '__main__':
     import time
 
     start_time = time.time()
-
-    NGAMES = 50
+    
+    if len(sys.argv) < 2:
+        print 'Missing argument ---'
+        print 'Usage: python qlearner.py <game number>'
+        sys.exit()
+    game_number = int(sys.argv[1])
     
 #    PLAY_TYPE = 'step'
 #    PLAY_TYPE = 'batch'
     PLAY_TYPE = 'play'
 
     # Run the local debugger
-    for i in range(NGAMES):
+    engine = LocalEngine(game=None)
 
-        engine = LocalEngine(game=None)
-
-        if i>0:
-            qbot = QLearnBot(engine.GetWorld(), load_file='saved_bots/qbot.json')
-        else:
-            # init qbot with weights 0
-            qbot = QLearnBot(engine.GetWorld(), load_file=None)
-            qbot.set_features(CompositingFeatures(BasicFeatures(), BasicFeatures()))
-            qbot.set_weights([0 for j in range (0, qbot.features.num_features())])
-            
-        # Generate and play on random 30 x 30 map
-        random_map = SymmetricMap(min_dim=50, max_dim=50)
-        random_map.random_walk_map()
-        fp = file("src/maps/2player/my_random.map", "w")
-        fp.write(random_map.map_text())
-        fp.close()
-            
-        # set up a game between current qbot and GreedyBot
-        engine.AddBot(qbot)        
-        engine.AddBot(GreedyBot(engine.GetWorld()))
-        qbot.ngames = i+1
-        engine.Run(PLAY_TYPE,sys.argv + ["--run", "-m", "src/maps/2player/my_random.map"])
-        qbot.save('saved_bots/qbot.json')
-        # this is an easy way to look at the weights
-        qbot.save_readable('saved_bots/qbot-game-%d.txt' % i)
+    if game_number > 0:
+        qbot = QLearnBot(engine.GetWorld(), load_file='saved_bots/qbot.json')
+    else:
+        # init qbot with weights 0
+        qbot = QLearnBot(engine.GetWorld(), load_file=None)
+        qbot.set_features(CompositingFeatures(BasicFeatures(), BasicFeatures()))
+        qbot.set_weights([0 for j in range (0, qbot.features.num_features())])
         
+    # Generate and play on random 30 x 30 map
+    random_map = SymmetricMap(min_dim=50, max_dim=50)
+    random_map.random_walk_map()
+    fp = file("src/maps/2player/my_random.map", "w")
+    fp.write(random_map.map_text())
+    fp.close()
+        
+    # set up a game between current qbot and GreedyBot
+    engine.AddBot(qbot)        
+    engine.AddBot(GreedyBot(engine.GetWorld()))
+    qbot.ngames = game_number + 1
+    engine.Run(PLAY_TYPE,sys.argv + ["--run", "-m", "src/maps/2player/my_random.map"])
+    qbot.save('saved_bots/qbot.json')
+    # this is an easy way to look at the weights
+    qbot.save_readable('saved_bots/qbot-game-%d.txt' % game_number)
         
     end_time = time.time()
     print 'training done, delta time = ', end_time-start_time
