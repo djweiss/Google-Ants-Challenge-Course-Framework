@@ -14,15 +14,11 @@ from logutil import *
 from copy import deepcopy
 from mapgen import SymmetricMap
 import time
-
-# Whether or not to crash the entire game upon invalid moves
-STRICT_MODE = True
-
 # A slightly modified version of the original Ants game from
 # antsgame.py: this breaks up the finish_turn() method of the original
 # Ants into two separate functions: FinishTurnMoves() and
 # FinishTurnResolve(), which are explained above.
-class StepAnts(Ants):
+class ResettableAnts(Ants):
     def __init__(self, options=None):
         Ants.__init__(self, options)
       
@@ -38,34 +34,61 @@ class StepAnts(Ants):
 
         self.all_food = []     # all food created
         self.current_food = {} # food currently in game
+        self.pending_food = defaultdict(int)
 
-        # initalise scores
-        self.score = [Fraction(0,1)]*self.num_players
-        self.score_history = [[s] for s in self.score]
-        self.bonus = [0 for s in self.score]
+        self.hills = {}        # all hills
+        self.hive_food = [0]*self.num_players # food waiting to spawn for player
+        self.hive_history = [[0] for _ in range(self.num_players)]
 
-        # initialise size
+        # used to cutoff games early
+        self.cutoff = None
+        self.cutoff_bot = LAND # Can be ant owner, FOOD or LAND
+        self.cutoff_turns = 0
+        # used to calculate the turn when the winner took the lead
+        self.winning_bot = None
+        self.winning_turn = 0
+        # used to calculate when the player rank last changed
+        self.ranking_bots = None
+        self.ranking_turn = 0
+        
+            # initialize size
         self.height, self.width = map_data['size']
         self.land_area = self.height*self.width - len(map_data['water'])
 
-        # initialise map
-        self.map = [[LAND]*self.width for i in range(self.height)]
+        # initialize map
+        # this matrix does not track hills, just ants
+        self.map = [[LAND]*self.width for _ in range(self.height)]
 
-        # initialise water
+        # initialize water
         for row, col in map_data['water']:
             self.map[row][col] = WATER
 
-        # initalise ants
-        for owner, locs in map_data['ants'].items():
+        # for new games
+        # ants are ignored and 1 ant is created per hill
+        # food is ignored
+        # for scenarios, the map file is followed exactly
+
+        # initialize hills
+        for owner, locs in map_data['hills'].items():
             for loc in locs:
-                self.add_ant(loc, owner)
+                hill = self.add_hill(loc, owner)
+                if not self.scenario:
+                    self.add_ant(hill)
 
-        # initalise food
-        for loc in map_data['food']:
-            self.add_food(loc)
+        if self.scenario:
+            # initialize ants
+            for player, player_ants in map_data['ants'].items():
+                for ant_loc in player_ants:
+                    self.add_initial_ant(ant_loc, player)
+            # initialize food
+            for food in map_data['food']:
+                self.add_food(food)
 
-        # track which food has been seen by each player
-        self.seen_food = [set() for i in range(self.num_players)]
+        # initialize scores
+        # points start at # of hills to prevent negative scores
+        self.score = [len(map_data['hills'][0])]*self.num_players
+        self.bonus = [0]*self.num_players
+        self.score_history = [[s] for s in self.score]
 
         # used to remember where the ants started
         self.initial_ant_list = sorted(self.current_ants.values(), key=operator.attrgetter('owner'))
@@ -74,54 +97,25 @@ class StepAnts(Ants):
         # cache used by neighbourhood_offsets() to determine nearby squares
         self.offsets_cache = {}
 
-        # used to track dead players, ants may still exist, but order are not processed
-        self.killed = [False for i in range(self.num_players)]
+        # used to track dead players, ants may still exist, but orders are not processed
+        self.killed = [False for _ in range(self.num_players)]
 
         # used to give a different ordering of players to each player
-        #   initialised to ensure that each player thinks they are player 0
-        self.switch = [[None]*self.num_players + range(-5,0) for i in range(self.num_players)]
+        #   initialized to ensure that each player thinks they are player 0
+        self.switch = [[None]*self.num_players + list(range(-5,0)) for i in range(self.num_players)]
         for i in range(self.num_players):
             self.switch[i][i] = 0
         # used to track water and land already reveal to player
-        # ants and food will reset spots so a second land entry will be sent
         self.revealed = [[[False for col in range(self.width)]
                           for row in range(self.height)]
-                         for p in range(self.num_players)]
+                         for _ in range(self.num_players)]
         # used to track what a player can see
         self.init_vision()
 
         # the engine may kill players before the game starts and this is needed to prevent errors
         self.orders = [[] for i in range(self.num_players)]
 
-    def FinishTurnMoves(self): # Content copied from Ants.finish_turn()
-        # Determine players alive at the start of the turn.  Only these
-        # players will be able to score this turn.
-        self.was_alive = set(i for i in range(self.num_players) if self.is_alive(i))
-        self.do_orders()
 
-    def FinishTurnResolve(self): # Content copied from Ants.finish_turn()
-        # Run attack, food, etc. resolution and scoring.
-        self.do_attack()
-        self.do_spawn()                       
-        self.food_extra += Fraction(self.food_rate * self.num_players, self.food_turn)
-        food_now = self.food_extra // self.num_players
-        self.food_extra %= self.num_players
-        self.do_food(food_now)
-
-        # Computes scores for each player.
-        for i, s in enumerate(self.score):
-            if i in self.was_alive:
-                # Update score for those were alive at the START of the turn.
-                self.score_history[i].append(s)
-            else:
-                # Otherwise undo any changes to their score made during this
-                # turn.
-                self.score[i] = self.score_history[i][-1]
-                
-        # Since all the ants have moved we can update the vision.
-        self.update_vision()
-        self.update_revealed()
-                
 class FakeLogger:
     def debug(self, text):
         None
@@ -136,7 +130,7 @@ class FakeLogger:
     def error(self, text):
         None
         # do nothing
-        
+       
 # The actual local engine class. See top of file for description.
 class BatchLocalEngine:
     def __init__(self, game=None, level=logging.CRITICAL):
@@ -269,7 +263,7 @@ class BatchLocalEngine:
         for b,bot in self.bots:
             L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
 
-        self.game = StepAnts(self.game_opts)
+        self.game = ResettableAnts(self.game_opts)
         L.debug("Game created.");
 
     # Runs the game until completion. Parses command line options.
@@ -284,21 +278,22 @@ class BatchLocalEngine:
         for b in self.bots:
             L.info("bot %d: %.02f points" % (b[0], float(self.game.score[b[0]])))
       
-    # Tk callback event for stepping through to the next turn.
-    def RunTurnCallback(self, event):
-        try:
-            self.RunTurn()
-        except Exception as e:
-            traceback.print_exc(file=sys.stderr)
-            sys.exit()
-
     # Steps through 1/2 of a turn.
     def RunTurn(self):
         game = self.game  # shortcut
 
+        L.debug("Starting local game...")
+        L.debug("Using bots: ")
+        for b,bot in self.bots:
+            L.debug("\tbot %d: %s" % (b, str(bot.__class__)))
+
+        L.debug("Game created.");
+
+        
+    
         if self.turn == game.turns or game.game_over():
-            L.info("Game finished at turn %d" % self.turn);
-            L.info("Game over? " + str(game.game_over()))
+            L.debug("Game finished at turn %d" % self.turn);
+            L.debug("Game over? " + str(game.game_over()))
             game.finish_game()
             return 0
     
@@ -318,27 +313,18 @@ class BatchLocalEngine:
             # Turn 0 is over. Now 1/2 phase turns can begin.
             self.turn += 1
 
-        if self.turn_phase == 0: # Movement phase, beginning of turn
-            L.debug("Starting turn: %d" % self.turn)
 
-            # Send game state from last turn to bots and get messages.
-            self.SendAndRcvMessages()        
-            game.FinishTurnMoves()
-
-            self.turn_phase = 1
-
-        else: # Combat, food, etc. resolution phase
+        L.debug("Starting turn: %d" % self.turn)
+        self.SendAndRcvMessages()
+        game.finish_turn()
+    
+        self.turn += 1
             
-            # Finish game turn logic.
-            game.FinishTurnResolve()
-
-            # Again, keep track of revealed water for bugfinding.
-            for p in range(len(self.bots)):
-                self.water[p] = self.water[p] + game.revealed_water[p]
-            
-            # Reset turn phase and advance turn.
-            self.turn_phase = 0 
-            self.turn += 1
+        if self.turn == game.turns or game.game_over():
+            L.info("Game finished at turn %d" % self.turn);
+            L.info("Game over? " + str(game.game_over()))
+            game.finish_game()
+            return 0
 
     # Sends game states to bots, receives messages, and clears game
     # state for the next turn.

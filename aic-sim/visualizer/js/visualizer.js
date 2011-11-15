@@ -14,7 +14,6 @@ $import('Director');
 $import('ImageManager');
 $import('Replay');
 $import('CanvasElement');
-$import('Sounds');
 
 var $import_base;
 

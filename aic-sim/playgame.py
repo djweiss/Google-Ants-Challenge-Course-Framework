@@ -8,11 +8,26 @@ from optparse import OptionParser, OptionGroup
 import random
 import cProfile
 import visualizer.visualize_locally
-import StringIO
 import json
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 from ants import Ants
-from engine import run_game
+
+sys.path.append("../worker")
+try:
+    from engine import run_game
+except ImportError:
+    # this can happen if we're launched with cwd outside our own dir
+    # get our full path, then work relative from that
+    cmd_folder = os.path.dirname(os.path.abspath(__file__))
+    if cmd_folder not in sys.path:
+        sys.path.insert(0, cmd_folder)
+    sys.path.append(cmd_folder + "/../worker")
+    # try again
+    from engine import run_game
 
 # make stderr red text
 try:
@@ -136,12 +151,12 @@ def main(argv):
                           help="Attack method to use for engine. (closest, focus, support, damage)")
     game_group.add_option("--kill_points", dest="kill_points",
                           default=2, type="int",
-                          help="Points awarded for killing an ant shared by all ants involved")
+                          help="Points awarded for killing a hill")
     game_group.add_option("--food", dest="food",
                           default="symmetric",
                           help="Food spawning method. (none, random, sections, symmetric)")
     game_group.add_option("--viewradius2", dest="viewradius2",
-                          default=55, type="int",
+                          default=77, type="int",
                           help="Vision radius of ants squared")
     game_group.add_option("--spawnradius2", dest="spawnradius2",
                           default=1, type="int",
@@ -149,18 +164,20 @@ def main(argv):
     game_group.add_option("--attackradius2", dest="attackradius2",
                           default=5, type="int",
                           help="Attack radius of ants squared")
-    game_group.add_option("--food_rate", dest="food_rate", nargs=2, type="int", default=(2,8),
+    game_group.add_option("--food_rate", dest="food_rate", nargs=2, type="int", default=(5,11),
                           help="Numerator of food per turn per player rate")
-    game_group.add_option("--food_turn", dest="food_turn", nargs=2, type="int", default=(12,30),
+    game_group.add_option("--food_turn", dest="food_turn", nargs=2, type="int", default=(19,37),
                           help="Denominator of food per turn per player rate")
     game_group.add_option("--food_start", dest="food_start", nargs=2, type="int", default=(75,175),
                           help="One over percentage of land area filled with food at start")
-    game_group.add_option("--food_visible", dest="food_visible", nargs=2, type="int", default=(1,3),
+    game_group.add_option("--food_visible", dest="food_visible", nargs=2, type="int", default=(3,5),
                           help="Amount of food guaranteed to be visible to starting ants")
-    game_group.add_option("--cutoff_turn", dest="cutoff_turn", type="int", default=100,
+    game_group.add_option("--cutoff_turn", dest="cutoff_turn", type="int", default=150,
                           help="Number of turns cutoff percentage is maintained to end game early")
-    game_group.add_option("--cutoff_percent", dest="cutoff_percent", type="float", default=0.90,
+    game_group.add_option("--cutoff_percent", dest="cutoff_percent", type="float", default=0.85,
                           help="Number of turns cutoff percentage is maintained to end game early")
+    game_group.add_option("--scenario", dest="scenario",
+                          action='store_true', default=False)
     parser.add_option_group(game_group)
 
     # the log directory must be specified for any logging to occur, except:
@@ -238,17 +255,21 @@ def main(argv):
         return -1
 
 def run_rounds(opts,args):
-    def get_cmd_wd(cmd):
+    def get_cmd_wd(cmd, exec_rel_cwd=False):
         ''' get the proper working directory from a command line '''
         new_cmd = []
         wd = None
-        for i, part in enumerate(reversed(cmd.split())):
+        for i, part in reversed(list(enumerate(cmd.split()))):
             if wd == None and os.path.exists(part):
-                wd = os.path.split(os.path.realpath(part))[0]
+                wd = os.path.dirname(os.path.realpath(part))
+                basename = os.path.basename(part)
                 if i == 0:
-                    new_cmd.insert(0, os.path.join(".", os.path.basename(part)))
+                    if exec_rel_cwd:
+                        new_cmd.insert(0, os.path.join(".", basename))
+                    else:
+                        new_cmd.insert(0, part)
                 else:
-                    new_cmd.insert(0, os.path.basename(part))
+                    new_cmd.insert(0, basename)
             else:
                 new_cmd.insert(0, part)
         return wd, ' '.join(new_cmd)
@@ -274,7 +295,8 @@ def run_rounds(opts,args):
         "food_start": opts.food_start,
         "food_visible": opts.food_visible,
         "cutoff_turn": opts.cutoff_turn,
-        "cutoff_percent": opts.cutoff_percent }
+        "cutoff_percent": opts.cutoff_percent,
+        "scenario": opts.scenario }
     if opts.player_seed != None:
         game_options['player_seed'] = opts.player_seed
     if opts.engine_seed != None:
@@ -303,7 +325,7 @@ def run_rounds(opts,args):
             game_options['engine_seed'] = opts.engine_seed + round
         game = Ants(game_options)
         # initialize bots
-        bots = [get_cmd_wd(arg) for arg in args]
+        bots = [get_cmd_wd(arg, exec_rel_cwd=opts.secure_jail) for arg in args]
         bot_count = len(bots)
         # insure correct number of bots, or fill in remaining positions
         if game.num_players != len(bots):
@@ -395,7 +417,7 @@ def run_rounds(opts,args):
 
         # intercept replay log so we can add player names
         if opts.log_replay:
-            intcpt_replay_io = StringIO.StringIO()
+            intcpt_replay_io = StringIO()
             real_replay_io = engine_options['replay_log']
             engine_options['replay_log'] = intcpt_replay_io
 

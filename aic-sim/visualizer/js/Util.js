@@ -34,16 +34,168 @@ Math.clamp = function(x, min, max) {
 };
 
 /**
+ * Calculate the (squared) distance between two points on a wrapped map.
+ * 
+ * @param {Number}
+ *        x1
+ * @param {Number}
+ *        y1
+ * @param {Number}
+ *        x2
+ * @param {Number}
+ *        y2
+ * @param {Number}
+ *        w The map width.
+ * @param {Number}
+ *        h The map height.
+ * @returns {Number} The squared minimum distance between the points.
+ */
+Math.dist_2 = function(x1, y1, x2, y2, w, h) {
+	var dx = Math.abs(x1 - x2);
+	var dy = Math.abs(y1 - y2);
+	dx = Math.min(dx, w - dx);
+	dy = Math.min(dy, h - dy);
+	return dx * dx + dy * dy;
+};
+
+var BrowserDetect = {
+	searchString: function (data) {
+		for (var i=0;i<data.length;i++)	{
+			var dataString = data[i].string;
+			var dataProp = data[i].prop;
+			this.versionSearchString = data[i].versionSearch || data[i].identity;
+			if (dataString) {
+				if (dataString.indexOf(data[i].subString) != -1)
+					return data[i].identity;
+			}
+			else if (dataProp)
+				return data[i].identity;
+		}
+	},
+	searchVersion: function (dataString) {
+		var index = dataString.indexOf(this.versionSearchString);
+		if (index == -1) return;
+		return parseFloat(dataString.substring(index+this.versionSearchString.length+1));
+	},
+	dataBrowser: [
+		{
+			string: navigator.userAgent,
+			subString: "Chrome",
+			identity: "Chrome"
+		},
+		{ 	string: navigator.userAgent,
+			subString: "OmniWeb",
+			versionSearch: "OmniWeb/",
+			identity: "OmniWeb"
+		},
+		{
+			string: navigator.vendor,
+			subString: "Apple",
+			identity: "Safari",
+			versionSearch: "Version"
+		},
+		{
+			prop: window.opera,
+			identity: "Opera",
+			versionSearch: "Version"
+		},
+		{
+			string: navigator.vendor,
+			subString: "iCab",
+			identity: "iCab"
+		},
+		{
+			string: navigator.vendor,
+			subString: "KDE",
+			identity: "Konqueror"
+		},
+		{
+			string: navigator.userAgent,
+			subString: "Firefox",
+			identity: "Firefox"
+		},
+		{
+			string: navigator.vendor,
+			subString: "Camino",
+			identity: "Camino"
+		},
+		{		// for newer Netscapes (6+)
+			string: navigator.userAgent,
+			subString: "Netscape",
+			identity: "Netscape"
+		},
+		{
+			string: navigator.userAgent,
+			subString: "MSIE",
+			identity: "Explorer",
+			versionSearch: "MSIE"
+		},
+		{
+			string: navigator.userAgent,
+			subString: "Gecko",
+			identity: "Mozilla",
+			versionSearch: "rv"
+		}
+	],
+	dataOS : [
+		{
+			string: navigator.platform,
+			subString: "Win",
+			identity: "Windows"
+		},
+		{
+			string: navigator.platform,
+			subString: "Mac",
+			identity: "Mac"
+		},
+		{
+			   string: navigator.userAgent,
+			   subString: "iPhone",
+			   identity: "iPhone/iPod"
+	    },
+		{
+			string: navigator.platform,
+			subString: "Linux",
+			identity: "Linux"
+		}
+	],
+	filterNotAny : function(list) {
+		var i;
+		var result = false;
+		for (i = 0; i < list.length; i++) {
+			result = result || this.filter(list[i][0], list[i][1], list[i][2]);
+			if (result) break;
+		}
+		return !result;
+	},
+	filter : function(browser, version, system) {
+		return (!(this.browser != browser || this.version != version || this.system != system));
+	},
+	init : function() {
+		this.browser = this.searchString(this.dataBrowser) || "unknown";
+		this.version = this.searchVersion(navigator.userAgent) || this.searchVersion(navigator.appVersion) || "unknown";
+		this.system  = this.searchString(this.dataOS) || "unknown";
+	}
+};
+BrowserDetect.init();
+
+/**
  * A set of browser quirks, that can be queried to take alternate code paths.
  * 
  * @namespace
  */
-Quirks = {
+var Quirks = {
 	/**
 	 * True for browsers that correctly support the HTML canvas shadow effect.
 	 */
-	fullImageShadowSupport : !(window.navigator && window.navigator.userAgent
-			.match(/\b(Firefox\/5\.|Chrome\/1[23]\.).*/))
+	fullImageShadowSupport : BrowserDetect.filterNotAny([
+		// shadow applies blur in shadow color to image
+		['Firefox', 5], 
+		// new rendering engine cuts off parts of images
+		['Firefox', 7, 'Windows'],
+		// no shadow blur support
+		['Chrome', 12], ['Chrome', 13]
+	])
 };
 
 /**
@@ -51,7 +203,7 @@ Quirks = {
  * 
  * @namespace
  */
-Key = {
+var Key = {
 	LEFT : 37,
 	RIGHT : 39,
 	SPACE : 32,
@@ -71,7 +223,7 @@ Key = {
  * 
  * @namespace
  */
-Html = {
+var Html = {
 	/**
 	 * Creates a table HTML element.
 	 * 
@@ -162,7 +314,7 @@ Html = {
  * 
  * @namespace
  */
-Shape = {
+var Shape = {
 	/**
 	 * Draws the rounded rectangles used by buttons. Drawing attributes must be set before calling
 	 * this function.
@@ -297,4 +449,43 @@ Delegate.prototype.invoke = function(args) {
 	} else {
 		this.func.apply(this.obj, this.args);
 	}
+};
+
+/**
+ * Converts a hsl color value to rgb.
+ *
+ * @param {Color} a list of 3 values representing hue, saturation and luminosity
+ * @returns {Color} a list of 3 values representing red, green and blue
+ */
+function hsl_to_rgb (C) {
+    var h = C[0];
+    var s = C[1]/100;
+    var l = C[2]/100;
+    var c = (1 - Math.abs(2 * l - 1)) * s;
+    var h2 = h / 60;
+    var x = c * (1 - Math.abs(h2 % 2 - 1));
+    var r, g, b;
+    switch (Math.floor(h2)) {
+    case 0: r = c; g = x; b = 0; break;
+    case 1: r = x; g = c; b = 0; break;
+    case 2: r = 0; g = c; b = x; break;
+    case 3: r = 0; g = x; b = c; break;
+    case 4: r = x; g = 0; b = c; break;
+    case 5: r = c; g = 0; b = x; break;
+    default: r = 0; g = 0; b = 0; break;
+    }
+    var m = l - 0.5 * c;
+    return [ Math.floor(0.999 + 255 * (r + m)),
+             Math.floor(0.999 + 255 * (g + m)),
+             Math.floor(0.999 + 255 * (b + m)) ]    
+};
+
+/**
+ * Converts a rgb color value to hexidecimal.
+ *
+ * @param {Color} a list of 3 values representing red, green and blue
+ * @returns {Color} the hexidecimal representation of a color
+ */
+function rgb_to_hex (C) {
+    return '#' + INT_TO_HEX[C[0]] + INT_TO_HEX[C[1]] + INT_TO_HEX[C[2]];
 };

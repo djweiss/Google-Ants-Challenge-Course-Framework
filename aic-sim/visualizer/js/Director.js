@@ -13,6 +13,7 @@
 function Director(vis) {
 	this.speed = 0;
 	this.lastTime = undefined;
+	this.time = 0;
 	this.vis = vis;
 	this.duration = 0;
 	this.defaultSpeed = 1;
@@ -20,9 +21,10 @@ function Director(vis) {
 	this.cpu = vis.state.config['cpu'];
 	this.onstate = undefined;
 	this.timeout = undefined;
-	this.frameCounter = undefined;
+	this.frameCounter = 0;
 	this.frameStart = undefined;
 	this.frameCpu = undefined;
+	this.fixedFpt = undefined;
 }
 
 /**
@@ -47,11 +49,15 @@ Director.prototype.playStop = function() {
  */
 Director.prototype.play = function() {
 	if (!this.playing()) {
-		if (this.vis.state.time === this.duration) {
-			this.vis.state.time = 0;
-		}
 		this.speed = this.defaultSpeed;
-		this.stopAt = this.duration;
+		if (this.vis.state.options['loop']) {
+			this.stopAt = undefined;
+		} else {
+			if (this.time === this.duration) {
+				this.vis.state.time = this.time = 0;
+			}
+			this.stopAt = this.duration;
+		}
 		if (this.onstate) this.onstate();
 		this.loop(0);
 		if (this.vis.state.options['profile']) console.profile();
@@ -81,8 +87,9 @@ Director.prototype.stop = function() {
 Director.prototype.gotoTick = function(time) {
 	this.stop();
 	var effectiveTime = Math.clamp(time, 0, this.duration);
-	if (this.vis.state.time != effectiveTime) {
-		this.vis.state.time = effectiveTime;
+	this.vis.state.fade = undefined;
+	if (this.vis.state.time !== effectiveTime) {
+		this.vis.state.time = this.time = effectiveTime;
 		this.vis.draw();
 	}
 };
@@ -96,17 +103,20 @@ Director.prototype.gotoTick = function(time) {
  *        be clamped.
  */
 Director.prototype.slowmoTo = function(time) {
+	var wasPlaying;
 	var effectiveTime = Math.clamp(time, 0, this.duration);
-	this.stopAt = effectiveTime;
-	var playing = this.playing();
-	if (this.vis.state.time < effectiveTime) {
-		this.speed = +1;
-	} else {
-		this.speed = -1;
-	}
-	if (!playing) {
-		if (this.onstate) this.onstate();
-		this.loop(0);
+	if (this.vis.state.time !== effectiveTime) {
+		this.stopAt = effectiveTime;
+		wasPlaying = this.playing();
+		if (this.vis.state.time < effectiveTime) {
+			this.speed = +1;
+		} else {
+			this.speed = -1;
+		}
+		if (!wasPlaying) {
+			if (this.onstate) this.onstate();
+			this.loop(0);
+		}
 	}
 };
 
@@ -122,50 +132,139 @@ Director.prototype.slowmoTo = function(time) {
  *        in the {@link Config}. It is used to calculate a CPU usage estimate.
  */
 Director.prototype.loop = function(delay) {
-	var newDelay;
+	var newDelay, i, a, repeat, useMax;
+	var cpuTime = undefined;
+	var lastTime = this.lastTime;
 	if (this.speed === 0) {
 		return;
 	}
-	var lastTime = this.lastTime;
-	this.lastTime = new Date().getTime();
-	if (lastTime === undefined) {
-		var cpuTime = undefined;
+	if (this.fixedFpt === undefined) {
+		this.lastTime = new Date().getTime();
+		if (lastTime !== undefined) {
+			cpuTime = this.lastTime - lastTime - delay;
+			do {
+				a = (this.lastTime - lastTime) * this.speed * 0.001;
+				i = undefined;
+				repeat = false;
+				if (this.vis.state.options['loop'] && a !== 0) {
+					if (this.speed > 0) {
+						if (this.time < 0) {
+							i = 0 - this.time;
+							if (i <= a) {
+								this.time += i;
+								this.speed = this.defaultSpeed;
+								repeat = true;
+							}
+						} else if (this.time < this.duration) {
+							i = this.duration - this.time;
+							if (i <= a) {
+								this.time += i;
+								this.speed = 1;
+								repeat = true;
+							}
+						} else {
+							i = this.duration + 1.5 - this.time;
+							if (i <= a) {
+								this.time = -1.5;
+								repeat = true;
+							}
+						}
+					} else {
+						if (this.time > this.duration) {
+							i = this.duration - this.time;
+							if (i >= a) {
+								this.time += i;
+								this.speed = this.defaultSpeed;
+								repeat = true;
+							}
+						} else if (this.time > 0) {
+							i = 0 - this.time;
+							if (i >= a) {
+								this.time += i;
+								this.speed = -1;
+								repeat = true;
+							}
+						} else {
+							i = -1.5 - this.time;
+							if (i >= a) {
+								this.time = this.duration + 1.5;
+								repeat = true;
+							}
+						}
+					}
+				}
+				if (repeat) {
+					lastTime += (this.lastTime - lastTime) * (i / a);
+				} else {
+					this.time += a;
+				}
+			} while (repeat);
+		}
 	} else {
-		cpuTime = this.lastTime - lastTime - delay;
-		this.vis.state.time += (this.lastTime - lastTime) * this.speed * 0.001;
+		this.frameCounter++;
+		this.time = this.frameCounter / this.fixedFpt;
 	}
+	// check if we can go on after this frame, stop or fade out and repeat
 	var goOn = true;
-	if (this.speed < 0 && this.vis.state.time <= this.stopAt) {
-		this.vis.state.time = this.stopAt;
-		goOn = false;
-		this.stop();
-	} else if (this.speed > 0 && this.vis.state.time >= this.stopAt) {
-		this.vis.state.time = this.stopAt;
-		goOn = false;
-		this.stop();
+	if (this.speed < 0) {
+		if (this.time <= this.stopAt) {
+			this.time = this.stopAt;
+			goOn = false;
+			this.stop();
+		}
+	} else if (this.speed > 0) {
+		if (this.time >= this.stopAt) {
+			this.time = this.stopAt;
+			goOn = false;
+			this.stop();
+		}
 	}
+	// check for fade out color
+	if (this.vis.state.options['loop'] && (this.time < 0 || this.time > this.duration)) {
+		if (this.time < -1) {
+			i = Math.round(255 * (2 + this.time));
+			a = 1;
+		} else if (this.time < 0) {
+			i = 255;
+			a = -this.time;
+		} else if (this.time > this.duration + 1) {
+			i = Math.round(255 * (this.time - this.duration - 1));
+			a = 1;
+		} else {
+			i = 0;
+			a = this.time - this.duration;
+		}
+		this.vis.state.fade = 'rgba(' + i + ',' + i + ',' + i + ',' + a + ')';
+	} else {
+		this.vis.state.fade = undefined;
+	}
+	this.vis.state.time = Math.clamp(this.time, 0, this.duration);
 	this.vis.draw();
 	if (goOn) {
-		if (this.vis.state.options['debug'] && cpuTime !== undefined) {
-			if (this.frameStart === undefined) {
-				this.frameStart = lastTime;
-				this.frameCounter = 0;
-				this.frameCpu = 0;
+		if (this.fixedFpt === undefined) {
+			if (this.vis.state.options['debug'] && cpuTime !== undefined) {
+				if (this.frameStart === undefined) {
+					this.frameStart = lastTime;
+					this.frameCounter = 0;
+					this.frameCpu = 0;
+				}
+				this.frameCounter++;
+				this.frameCpu += cpuTime;
+				if (this.lastTime >= this.frameStart + 1000) {
+					var delta = (this.lastTime - this.frameStart);
+					var fps = Math.round(1000 * this.frameCounter / delta);
+					var cpu = Math.round(100 * this.frameCpu / delta);
+					document.title = fps + ' fps @ ' + cpu + '% cpu';
+					this.frameStart = this.lastTime;
+					this.frameCounter = 0;
+					this.frameCpu = 0;
+				}
 			}
-			this.frameCounter++;
-			this.frameCpu += cpuTime;
-			if (this.lastTime >= this.frameStart + 1000) {
-				var delta = (this.lastTime - this.frameStart);
-				var fps = Math.round(1000 * this.frameCounter / delta);
-				var cpu = Math.round(100 * this.frameCpu / delta);
-				document.title = fps + ' fps @ ' + cpu + '% cpu';
-				this.frameStart = this.lastTime;
-				this.frameCounter = 0;
-				this.frameCpu = 0;
-			}
+			useMax = (this.cpu <= 0 || this.cpu > 1) || cpuTime === undefined;
+		} else {
+			useMax = true;
 		}
 		var that = this;
-		var useMax = (this.cpu <= 0 || this.cpu > 1) || cpuTime === undefined;
 		if (useMax) {
 			that.timeout = window.setTimeout(function() {
 				that.loop(delay);

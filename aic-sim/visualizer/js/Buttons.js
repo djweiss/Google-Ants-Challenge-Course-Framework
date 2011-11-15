@@ -33,16 +33,12 @@ Button.prototype.draw = function() {
 	var ch = (loc.h > g.y + g.h - loc.y) ? g.y + g.h - loc.y : loc.h;
 	if (cw <= 0 || ch <= 0) return;
 	ctx.save();
-	ctx.fillStyle = '#fff';
-	ctx.fillRect(loc.x, loc.y, cw, ch);
-	if (!this.enabled) ctx.globalAlpha = 0.5;
 	ctx.beginPath();
-	ctx.moveTo(loc.x, loc.y);
-	ctx.lineTo(loc.x + cw, loc.y);
-	ctx.lineTo(loc.x + cw, loc.y + ch);
-	ctx.lineTo(loc.x, loc.y + ch);
-	ctx.closePath();
+	ctx.rect(loc.x, loc.y, cw, ch);
 	ctx.clip();
+	ctx.fillStyle = '#fff';
+	ctx.fill();
+	if (!this.enabled) ctx.globalAlpha = 0.5;
 	var r = 0.2 * Math.min(loc.w, loc.h);
 	if (this.onclick && this.enabled) {
 		if (this.hover || this.down !== 0) {
@@ -50,9 +46,9 @@ Button.prototype.draw = function() {
 			ctx.fillStyle = 'rgb(255, 230, 200)';
 			ctx.fill();
 		}
-		ctx.shadowBlur = 4 - 1.5 * this.down;
-		ctx.shadowOffsetX = -this.down;
-		ctx.shadowOffsetY = +this.down;
+		ctx.shadowBlur = 4 - 0.75 * this.down;
+		ctx.shadowOffsetX = -0.5 * this.down;
+		ctx.shadowOffsetY = +0.5 * this.down;
 		if (Quirks.fullImageShadowSupport) {
 			ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
 		} else {
@@ -370,14 +366,19 @@ TextButton.extend(Button);
  * @see Button#draw
  */
 TextButton.prototype.drawInternal = function(ctx) {
-	ctx.shadowColor = SAND_COLOR;
-	ctx.shadowOffsetX = 0;
-	ctx.shadowOffsetY = 0;
-	ctx.shadowBlur = 2;
 	ctx.textAlign = 'left';
 	ctx.textBaseline = 'bottom';
 	ctx.font = FONT;
+
+	ctx.strokeStyle = '#000';
+	ctx.lineWidth = 1;
+	ctx.strokeText(this.text, 4, 25);
+
 	ctx.fillStyle = this.color;
+	ctx.shadowColor = this.color;
+	ctx.shadowOffsetX = 0;
+	ctx.shadowOffsetY = 0;
+	ctx.shadowBlur = 0.5;
 	ctx.fillText(this.text, 4, 25);
 };
 
@@ -477,7 +478,7 @@ TextButtonGroup.prototype.cascade = function(width) {
  */
 function ButtonManager(ctx) {
 	this.ctx = ctx;
-	this.groups = {};
+	this.groups = new Object();
 	this.hover = null;
 	this.pinned = null;
 }

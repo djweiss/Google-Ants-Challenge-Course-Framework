@@ -70,21 +70,6 @@ DataType = {
 		}
 		return p;
 	},
-	MAP : function(p, n) {
-		p = p.match(DataType.MATCH);
-		if (!p[1]) {
-			throw new Error('Parameter ' + n + ' must not be empty.');
-		}
-		p[0] = new Array(p[1].length);
-		for ( var col = 0; col < p[1].length; col++) {
-			var c = p[1].charAt(col);
-			if (c !== '%' && c !== '*' && c !== '.' && (c < 'a' || c > 'z')) {
-				throw new Error('Invalid character in map line: ' + c);
-			}
-			p[0][col] = (c === '%');
-		}
-		return [ p[0], p[2] ];
-	},
 	ORDERS : function(p) {
 		p = p.match(DataType.MATCH);
 		p[1] = p[1].split('');
@@ -144,29 +129,31 @@ DataType = {
  * @param {Boolean}
  *        debug If true, then partially corrupt replays are loaded instead of throwing an error.
  * @param {String}
- *        swapUser The user with this ID (usually a database index) in the replay will get the first
+ *        highlightUser The user with this ID (usually a database index) in the replay will get the first
  *        color in the player colors array.
  * @see Options#user
  * @see #addMissingMetaData
  * @see Ant
  */
-function Replay(replay, debug, swapUser) {
-	var i, k, player_scores, swapIndex;
+function Replay(replay, debug, highlightUser) {
+	var i, k, player_scores, highlightPlayer, c, n, r, regex;
 	var format = 'json';
+	var storeslist = undefined;
 	/**
 	 * @private
 	 */
 	this.debug = debug || false;
 	if (replay === undefined) {
 		// This code path is taken by the Java wrapper for streaming replay and initializes only the
-		// basics. Most of the rest is faster done in native Java, that through Rhino.
-		this.meta = {
-			'challenge' : 'ants',
-			'replayformat' : format,
-			'replaydata' : {
-				'map' : {},
-				'ants' : []
-			}
+		// basics. Most of the rest is faster done in native Java, than through Rhino.
+		this.meta = new Object();
+		this.meta['challenge'] = 'ants';
+		this.meta['replayformat'] = format;
+		this.meta['replaydata'] = {
+			'map' : {},
+			'ants' : [],
+			'food' : [],
+			'hills' : []
 		};
 		this.duration = -1;
 		this.hasDuration = true;
@@ -180,11 +167,10 @@ function Replay(replay, debug, swapUser) {
 		}
 		// check if we have meta data or just replay data
 		if (replay['challenge'] === undefined) {
-			this.meta = {
-				'challenge' : 'ants',
-				'replayformat' : format,
-				'replaydata' : replay
-			};
+			this.meta = new Object();
+			this.meta['challenge'] = 'ants';
+			this.meta['replayformat'] = format;
+			this.meta['replaydata'] = replay;
 		} else {
 			this.meta = replay;
 			if (typeof this.meta['replaydata'] == 'string') {
@@ -193,7 +179,7 @@ function Replay(replay, debug, swapUser) {
 			}
 			replay = this.meta['replaydata'];
 		}
-		// validate metadata
+		// validate meta data
 		if (this.meta['challenge'] !== 'ants') {
 			throw new Error('This visualizer is for the ants challenge,' + ' but a "'
 					+ this.meta['challenge'] + '" replay was loaded.');
@@ -204,10 +190,12 @@ function Replay(replay, debug, swapUser) {
 		if (!replay) {
 			throw new Error('replay meta data is no object notation');
 		}
-		// start parsing process
+
+		// start validation process
 		this.duration = 0;
 		var that = this;
 		if (replay) {
+			// set up helper functions
 			var stack = [];
 			var keyEq = function(obj, key, val) {
 				if (obj[key] !== val && !that.debug) {
@@ -271,15 +259,19 @@ function Replay(replay, debug, swapUser) {
 								+ duration + ' by "' + obj + '"');
 					}
 				} else {
-					that.duration = duration;
+					that.duration = Math.max(that.duration, duration);
 					if (fixed) durationSetter = obj;
 				}
 			};
+
+			// options
 			enterObj(this.meta, 'replaydata');
-			keyEq(replay, 'revision', 2);
+			keyRange(replay, 'revision', 2, 3);
+			this.revision = replay['revision'];
 			keyRange(replay, 'players', 1, 26);
 			this.players = replay['players'];
 			keyOption(replay, 'viewradius2', keyRange, [ 0, undefined ]);
+
 			// map
 			var map = enterObj(replay, 'map');
 			keyIsArr(map, 'data', 1, undefined);
@@ -292,8 +284,12 @@ function Replay(replay, debug, swapUser) {
 			this.cols = map['cols'];
 			var mapdata = enterObj(map, 'data');
 			this.walls = new Array(mapdata.length);
-			var regex = /[^%*.a-z]/;
-			for ( var r = 0; r < mapdata.length; r++) {
+			if (this.revision >= 3) {
+				regex = /[^%*.a-zA-Z0-9]/;
+			} else {
+				regex = /[^%*.a-z]/;
+			}
+			for (r = 0; r < mapdata.length; r++) {
 				keyIsStr(mapdata, r, map['cols'], map['cols']);
 				var maprow = new String(mapdata[r]);
 				if ((i = maprow.search(regex)) !== -1 && !this.debug) {
@@ -301,18 +297,48 @@ function Replay(replay, debug, swapUser) {
 							+ '" in map. Zero based row/col: ' + r + '/' + i);
 				}
 				this.walls[r] = new Array(maprow.length);
-				for ( var c = 0; c < maprow.length; c++) {
+				for (c = 0; c < maprow.length; c++) {
 					this.walls[r][c] = (maprow.charAt(c) === '%');
 				}
 			}
 			stack.pop();
 			stack.pop();
+
+			// hills
+			if (this.revision >= 3) {
+				keyIsArr(replay, 'hills', 0, undefined);
+				stack.push('hills');
+				var hills = replay['hills'];
+				for (n = 0; n < hills.length; n++) {
+					keyIsArr(hills, n, 4, 5);
+					stack.push(n);
+					var obj = hills[n];
+					// row must be within map height
+					keyRange(obj, 0, 0, map['rows'] - 1);
+					// col must be within map width
+					keyRange(obj, 1, 0, map['cols'] - 1);
+					// player index must match player count
+					keyRange(obj, 2, 0, this.players - 1);
+					// destruction turn must be >= 0
+					keyRange(obj, 3, 0, undefined);
+					setReplayDuration(obj[3] - 1, false);
+					if (obj.length > 4) {
+						// destroying player index must match player count
+						keyRange(obj, 4, 0, this.players - 1);
+					}
+					stack.pop();
+				}
+				stack.pop();
+			} else {
+				replay['hills'] = [];
+			}
+
 			// ants
 			keyIsArr(replay, 'ants', 0, undefined);
 			stack.push('ants');
 			var ants = replay['ants'];
 			regex = /[^nsew-]/;
-			for ( var n = 0; n < ants.length; n++) {
+			for (n = 0; n < ants.length; n++) {
 				keyIsArr(ants, n, 4, 7);
 				stack.push(n);
 				var obj = ants[n];
@@ -322,32 +348,71 @@ function Replay(replay, debug, swapUser) {
 				keyRange(obj, 1, 0, map['cols'] - 1);
 				// start must be >= 0
 				keyRange(obj, 2, 0, undefined);
-				if (obj[2] === 0) {
-					// conversion must be >= 0
-					keyRange(obj, 3, 0, undefined);
+				if (this.revision <= 2) {
+					// revision 2 has food and ant info in the same object
+					if (obj[2] === 0) {
+						// conversion must be >= 0
+						keyRange(obj, 3, 0, undefined);
+					} else {
+						// conversion must be > start
+						keyRange(obj, 3, obj[2] + 1, undefined);
+					}
+					k = 4;
 				} else {
-					// conversion must be > start
-					keyRange(obj, 3, obj[2] + 1, undefined);
+					k = 3;
 				}
-				if (obj.length > 4) {
-					// end turn must be > conversion turn
-					keyRange(obj, 4, obj[3] + 1, undefined);
+				if (this.revision <= 2 && obj.length > 4 || this.revision >= 3) {
+					// end turn must be > conversion turn (or start turn for rev. 3 and up)
+					keyRange(obj, k, obj[k - 1] + 1, undefined);
 					// player index must match player count
-					keyRange(obj, 5, 0, this.players - 1);
+					keyRange(obj, k + 1, 0, this.players - 1);
 					// moves must be valid
-					var lifespan = obj[4] - obj[3];
-					keyIsStr(obj, 6, lifespan - 1, lifespan);
-					setReplayDuration(obj[4] - 1, obj[6].length !== lifespan);
-					if ((i = obj[6].search(regex)) !== -1 && !this.debug) {
-						throw new Error('Invalid character "' + obj[6].charAt(i)
-								+ '" in move orders at index ' + i + ' in the string "' + obj[6]
-								+ '"');
+					var lifespan = obj[k] - obj[k - 1];
+					keyIsStr(obj, k + 2, lifespan - 1, lifespan);
+					setReplayDuration(obj[k] - 1, obj[k + 2].length !== lifespan);
+					if ((i = obj[k + 2].search(regex)) !== -1 && !this.debug) {
+						throw new Error('Invalid character "' + obj[k + 2].charAt(i)
+								+ '" in move orders at index ' + i + ' in the string "'
+								+ obj[k + 2] + '"');
 					}
 				} else {
 					setReplayDuration(obj[3] - 1, false);
 				}
 				stack.pop();
 			}
+			stack.pop();
+
+			// food
+			if (this.revision >= 3) {
+				keyIsArr(replay, 'food', 0, undefined);
+				stack.push('food');
+				var food = replay['food'];
+				for (n = 0; n < food.length; n++) {
+					keyIsArr(food, n, 3, 5);
+					stack.push(n);
+					var obj = food[n];
+					// row must be within map height
+					keyRange(obj, 0, 0, map['rows'] - 1);
+					// col must be within map width
+					keyRange(obj, 1, 0, map['cols'] - 1);
+					// start must be >= 0
+					keyRange(obj, 2, 0, undefined);
+					if (obj.length > 3) {
+						// end turn must be > start turn
+						keyRange(obj, 3, obj[2] + 1, undefined);
+						if (obj.length > 4) {
+							// eating player index must match player count
+							keyRange(obj, 4, 0, this.players - 1);
+						}
+						setReplayDuration(obj[3] - 1, false);
+					} else {
+						setReplayDuration(obj[2] - 1, false);
+					}
+					stack.pop();
+				}
+				stack.pop();
+			}
+
 			// scores
 			keyIsArr(replay, 'scores', this.players, this.players);
 			stack.push('scores');
@@ -355,21 +420,35 @@ function Replay(replay, debug, swapUser) {
 			for (i = 0; i < this.players; i++) {
 				setReplayDuration(scoreslist[i].length - 1, false);
 			}
+			stack.pop();
 			if (replay['bonus']) {
 				keyIsArr(replay, 'bonus', this.players, this.players);
 			}
+			if (this.revision >= 3) {
+				keyIsArr(replay, 'hive_history', this.players, this.players);
+				stack.push('hive_history');
+				storeslist = replay['hive_history'];
+				for (i = 0; i < this.players; i++) {
+					setReplayDuration(storeslist[i].length - 1, false);
+				}
+				stack.pop();
+			}
+
 			// prepare score and count lists
 			this.turns = new Array(this.duration + 1);
 			this['scores'] = new Array(this.duration + 1);
 			this['counts'] = new Array(this.duration + 1);
+			this['stores'] = new Array(this.duration + 1);
 			this.fogs = new Array(this.players);
 			for (n = 0; n <= this.duration; n++) {
 				this['scores'][n] = new Array(this.players);
 				this['counts'][n] = new Array(this.players);
+				this['stores'][n] = new Array(this.players);
 				for (i = 0; i < this.players; i++)
 					this['counts'][n][i] = 0;
 			}
 			for (i = 0; i < this.players; i++) {
+				// convert scores from per-player to per-turn
 				player_scores = scoreslist[i];
 				for (k = 0; k < player_scores.length; k++) {
 					this['scores'][k][i] = player_scores[k];
@@ -377,26 +456,50 @@ function Replay(replay, debug, swapUser) {
 				for (; k <= this.duration; k++) {
 					this['scores'][k][i] = player_scores[player_scores.length - 1];
 				}
+				// convert stores from per-player to per-turn
+				if (this.revision >= 3) {
+					player_stores = storeslist[i];
+					for (k = 0; k < player_stores.length; k++) {
+						this['stores'][k][i] = player_stores[k];
+					}
+					for (; k <= this.duration; k++) {
+						this['stores'][k][i] = player_stores[player_stores.length - 1];
+					}
+				} else {
+					for (k = 0; k <= this.duration; k++) {
+						this['stores'][k][i] = 0;
+					}
+				}
 				this.fogs[i] = new Array(this.duration + 1);
 			}
-			for (i = 0; i < ants.length; i++) {
-				if (ants[i][5] !== undefined) {
-					// account ant to the owner
-					for (n = ants[i][3]; n < ants[i][4]; n++) {
-						this['counts'][n][ants[i][5]]++;
+			// account ants their owners
+			if (this.revision >= 3) {
+				for (i = 0; i < ants.length; i++) {
+					for (n = ants[i][2]; n < ants[i][3]; n++) {
+						this['counts'][n][ants[i][4]]++;
+					}
+				}
+			} else {
+				for (i = 0; i < ants.length; i++) {
+					if (ants[i][5] !== undefined) {
+						// account ant to the owner
+						for (n = ants[i][3]; n < ants[i][4]; n++) {
+							this['counts'][n][ants[i][5]]++;
+						}
 					}
 				}
 			}
 			this.aniAnts = new Array(ants.length);
 		}
 		this.hasDuration = this.duration > 0 || this.meta['replaydata']['turns'] > 0;
+
 		// add missing meta data
-		swapIndex = undefined;
+		highlightPlayer = undefined;
 		if (this.meta['user_ids']) {
-			swapIndex = this.meta['user_ids'].indexOf(swapUser, 0);
-			if (swapIndex === -1) swapIndex = undefined;
+			highlightPlayer = this.meta['user_ids'].indexOf(highlightUser, 0);
+			if (highlightPlayer === -1) highlightPlayer = undefined;
 		}
-		this.addMissingMetaData(swapIndex);
+		this.addMissingMetaData(highlightPlayer);
 	}
 }
 
@@ -405,11 +508,11 @@ function Replay(replay, debug, swapUser) {
  * 
  * @private
  * @param {Number}
- *        swapIndex The index of a player who's default color should be exchanged with the first
+ *        highlightPlayer The index of a player who's default color should be exchanged with the first
  *        player's color. This is useful to identify a selected player by its color (the first one
  *        in the PĹAYER_COLORS array).
  */
-Replay.prototype.addMissingMetaData = function(swapIndex) {
+Replay.prototype.addMissingMetaData = function(highlightPlayer) {
 	var i;
 	if (!(this.meta['playernames'] instanceof Array)) {
 		if (this.meta['players'] instanceof Array) {
@@ -423,18 +526,48 @@ Replay.prototype.addMissingMetaData = function(swapIndex) {
 	if (!(this.meta['playercolors'] instanceof Array)) {
 		this.meta['playercolors'] = new Array(this.players);
 	}
+	if (!(this.meta['playerturns'] instanceof Array)) {
+		this.meta['playerturns'] = new Array(this.players);
+	}
+	// setup player colors
+	var rank;
+    var rank_sorted;
+	if (this.meta['challenge_rank']) {
+        rank = this.meta['challenge_rank'].slice();
+	}
+	if (highlightPlayer !== undefined) {
+		var COLOR_MAP = COLOR_MAPS[this.players-1];
+        rank.splice(highlightPlayer, 1);
+	} else {
+		var COLOR_MAP = COLOR_MAPS[this.players];
+	}
+    if (rank) {
+        rank_sorted = rank.slice().sort(function (a, b) { return a - b; });
+    }
+    var adjust = 0;
 	for (i = 0; i < this.players; i++) {
 		if (!this.meta['playernames'][i]) {
 			this.meta['playernames'][i] = 'player ' + (i + 1);
 		}
+		if (this.meta['replaydata']['scores'] && !this.meta['playerturns'][i]) {
+			this.meta['playerturns'][i] = this.meta['replaydata']['scores'][i].length - 1;
+		}
 		if (!(this.meta['playercolors'][i] instanceof Array)) {
-			if (swapIndex !== undefined && i == 0) {
-				this.meta['playercolors'][i] = PLAYER_COLORS[swapIndex];
-			} else if (swapIndex !== undefined && i == swapIndex) {
-				this.meta['playercolors'][i] = PLAYER_COLORS[0];
-			} else {
-				this.meta['playercolors'][i] = PLAYER_COLORS[i];
-			}
+            var color;
+            if (highlightPlayer !== undefined && i === highlightPlayer) {
+                color = PLAYER_COLORS[COLOR_MAPS[0]];
+                adjust = 1;
+            } else {
+                if (rank) {
+                    var rank_i = rank_sorted.indexOf(rank[i - adjust]);
+                    color = PLAYER_COLORS[COLOR_MAP[rank_i]];
+                    rank_sorted[rank_i] = null;
+                    
+                } else {
+                    color = PLAYER_COLORS[COLOR_MAP[i]];
+                }
+            }
+            this.meta['playercolors'][i] = color = hsl_to_rgb(color);;
 		}
 	}
 	this.htmlPlayerColors = new Array(this.players);
@@ -460,12 +593,15 @@ Replay.prototype.txtToJson = function(replay) {
 	var orders, fixed, scores, result, isReplay;
 	lit = new LineIterator(replay);
 	result = {
-		'revision' : 2,
+		'revision' : 3,
 		'map' : {
 			'data' : []
 		},
+		'hills' : [],
 		'ants' : [],
-		'scores' : []
+		'food' : [],
+		'scores' : [],
+		'hive_history' : []
 	};
 	this.turns = [];
 	tl = lit.gimmeNext();
@@ -511,13 +647,20 @@ Replay.prototype.txtToJson = function(replay) {
 			result['map']['data'].push(tl.params[0]);
 			if (!isReplay) {
 				// in a map file we want to extract starting positions
-				for (i = 0; i < cols; i++) {
-					c = tl.params[0].charAt(i);
+				for (col = 0; col < cols; col++) {
+					c = tl.params[0].charAt(col);
 					if (c >= 'a' && c <= 'z') {
-						result['ants'].push([ rows, i, 0, 0, 1, c.toUpperCase().charCodeAt(0) - 65,
-								'-' ]);
+						c = c.charCodeAt(0) - 97;
+						result['ants'].push([ rows, col, 0, 1, c, '-' ]);
+					} else if (c >= 'A' && c <= 'Z') {
+						c = c.charCodeAt(0) - 65;
+						result['ants'].push([ rows, col, 0, 1, c, '-' ]);
+						result['hills'].push([ rows, col, c, 1 ]);
+					} else if (c >= '0' && c <= '9') {
+						c = c.charCodeAt(0) - 48;
+						result['hills'].push([ rows, col, c, 1 ]);
 					} else if (c === '*') {
-						result['ants'].push([ rows, i, 0, 1 ]);
+						result['food'].push([ rows, col, 0 ]);
 					}
 				}
 			}
@@ -570,6 +713,7 @@ Replay.prototype.txtToJson = function(replay) {
 		} else {
 			for (i = 0; i < result['players']; i++) {
 				result['scores'].push([ 0 ]);
+				result['hive_history'].push([ 0 ]);
 			}
 		}
 		if (lit.moar()) {
@@ -597,17 +741,22 @@ Replay.prototype.txtToJson = function(replay) {
  * @returns {Ant[]} The array of visible ants.
  */
 Replay.prototype.getTurn = function(n) {
-	var i, turn, ants, ant, aniAnt, lastFrame, dead;
+	var i, idx, turn, ants, ant, aniAnt, lastFrame, dead, food, moves, activation;
 	if (this.turns[n] === undefined) {
 		if (n !== 0) this.getTurn(n - 1);
 		turn = this.turns[n] = [];
 		// generate ants & keyframes
 		ants = this.meta['replaydata']['ants'];
+		food = this.meta['replaydata']['food'];
 		for (i = 0; i < ants.length; i++) {
 			ant = ants[i];
 			if (ant[2] === n + 1 || n === 0 && ant[2] === 0) {
 				// spawn this ant
-				aniAnt = this.spawnAnt(i, ant[0], ant[1], ant[2], ant[5]);
+				if (this.revision >= 3) {
+					aniAnt = this.spawnAnt(i, ant[0], ant[1], ant[2], ant[4]);
+				} else {
+					aniAnt = this.spawnFood(i, ant[0], ant[1], ant[2], ant[5]);
+				}
 			} else if (this.aniAnts[i]) {
 				// load existing state
 				aniAnt = this.aniAnts[i];
@@ -615,15 +764,24 @@ Replay.prototype.getTurn = function(n) {
 				// continue with next ant
 				continue;
 			}
-			if (ant[5] !== undefined && (ant[3] === n + 1 || n === 0 && ant[3] === 0)) {
-				// fade to player color
-				this.convertAnt(aniAnt, ant[3] == ant[2], ant[3], ant[5]);
+			if (this.revision >= 3) {
+				moves = ant[5];
+				activation = ant[2];
+			} else {
+				if (ant[5] !== undefined && (ant[3] === n + 1 || n === 0 && ant[3] === 0)) {
+					// fade to player color
+					this.convertAnt(aniAnt, ant[3] == ant[2], ant[3], ant[5]);
+				}
+				moves = ant[6];
+				activation = ant[3];
 			}
-			if (ant[6] !== undefined && n >= ant[3] && n < ant[3] + ant[6].length) {
+			if (moves !== undefined && n >= activation && n < activation + moves.length) {
+				if (this.revision <= 2) {
+					aniAnt.frameAt(n)['owner'] = ant[5];
+				}
 				// move
-				aniAnt.frameAt(n)['owner'] = ant[5];
 				var dir = undefined;
-				switch (ant[6].charAt(n - ant[3])) {
+				switch (moves.charAt(n - activation)) {
 				case 'n':
 				case 'N':
 					dir = Direction.N;
@@ -646,7 +804,11 @@ Replay.prototype.getTurn = function(n) {
 					aniAnt.fade('y', lastFrame['y'] + dir.y, n, n + 0.5);
 				}
 			}
-			dead = (ant[4] || ant[3]);
+			if (this.revision >= 3) {
+				dead = (ant[3] || activation);
+			} else {
+				dead = (ant[4] || activation);
+			}
 			if (dead === n + 1) {
 				// end of life
 				this.killAnt(aniAnt, dead);
@@ -654,6 +816,31 @@ Replay.prototype.getTurn = function(n) {
 			if (n < dead) {
 				// assign ant to display list
 				turn.push(aniAnt);
+			}
+		}
+		if (this.revision >= 3) {
+			for (i = 0; i < food.length; i++) {
+				ant = food[i];
+				idx = i + ants.length;
+				if (ant[2] === n + 1 || n === 0 && ant[2] === 0) {
+					// spawn this food
+					aniAnt = this.spawnFood(idx, ant[0], ant[1], ant[2], undefined);
+				} else if (this.aniAnts[idx]) {
+					// load existing state
+					aniAnt = this.aniAnts[idx];
+				} else {
+					// continue with next ant
+					continue;
+				}
+				dead = ant[3];
+				if (dead === n + 1) {
+					// end of life
+					this.killAnt(aniAnt, dead);
+				}
+				if (dead === undefined || n < dead) {
+					// assign ant to display list
+					turn.push(aniAnt);
+				}
 			}
 		}
 	}
@@ -671,19 +858,59 @@ Replay.prototype.getTurn = function(n) {
  * @param {Number}
  *        col Map column to spawn the ant on.
  * @param {Number}
- *        spawn
- * @param owner
- * @returns {Ant}
+ *        spawn Turn to spawn the ant at.
+ * @param {Number}
+ *        owner the owning player index
+ * @returns {Ant} The new animation ant object.
  */
-Replay.prototype.spawnAnt = function(id, row, col, spawn, owner) {
+Replay.prototype.spawnFood = function(id, row, col, spawn, owner) {
 	var aniAnt = this.aniAnts[id] = new Ant(id, spawn - 0.25);
-	aniAnt.owner = owner;
 	var f = aniAnt.frameAt(spawn - 0.25);
+	aniAnt.owner = owner;
 	f['x'] = col;
 	f['y'] = row;
 	f['r'] = FOOD_COLOR[0];
 	f['g'] = FOOD_COLOR[1];
 	f['b'] = FOOD_COLOR[2];
+	if (spawn !== 0) {
+		f = aniAnt.frameAt(spawn);
+		f['size'] = 1.0;
+		f = aniAnt.frameAt(spawn + 0.125);
+		f['size'] = 1.5;
+		f = aniAnt.frameAt(spawn + 0.25);
+		f['size'] = 0.7;
+		f = aniAnt.frameAt(spawn + 0.5);
+	}
+	f['size'] = 1;
+	return aniAnt;
+};
+
+/**
+ * Spawns a new ant.
+ * 
+ * @param {Number}
+ *        id Global ant id, an auto-incrementing number for each new ant. See {@link Config#label}
+ * @param {Number}
+ *        row Map row to spawn the ant on.
+ * @param {Number}
+ *        col Map column to spawn the ant on.
+ * @param {Number}
+ *        spawn Turn to spawn the ant at.
+ * @param {Number}
+ *        owner the owning player index
+ * @returns {Ant} The new animation ant object.
+ */
+Replay.prototype.spawnAnt = function(id, row, col, spawn, owner) {
+	var aniAnt = this.aniAnts[id] = new Ant(id, spawn - 0.25);
+	var color = this.meta['playercolors'][owner];
+	var f = aniAnt.frameAt(spawn - 0.25);
+	aniAnt.owner = owner;
+	f['x'] = col;
+	f['y'] = row;
+	f['owner'] = owner;
+	f['r'] = color[0];
+	f['g'] = color[1];
+	f['b'] = color[2];
 	if (spawn !== 0) {
 		f = aniAnt.frameAt(spawn);
 		f['size'] = 1.0;
@@ -782,8 +1009,8 @@ Replay.prototype.deadAnt = function(aniAnt, dead) {
 };
 
 /**
- * Fetches a 2D-matrix (of map size) of boolean values representing, what is covered by fog-of-war
- * for a player. For an eleminated player this will be an all-true matrix.<br>
+ * Fetches a 2D-matrix (of map size) of boolean values in row/col structure, representing what is
+ * covered by fog-of-war for a player. For an eleminated player this will be an all-true matrix.<br>
  * <ul>
  * <li>Once computed, the map will be cached.</li>
  * <li>Unlike the turn data, fog of war is not computed iteratively. So it does not depend on the
@@ -847,6 +1074,202 @@ Replay.prototype.getFog = function(player, turn) {
 		}
 	}
 	return fogs[turn];
+};
+
+/**
+ * This method will try and recreate the bot input generated by the engine as seen by a particular
+ * player in this replay.<br>
+ * To best match the exact values sent by the engine I recreate the order of visible items as in
+ * <code>get_state_changes</code> in ants.py. Elements are ordered by type first.
+ * <ol>
+ * <li>water</li>
+ * <li>hills</li>
+ * <li>alive ants</li>
+ * <li>food</li>
+ * <li>dead ants</li>
+ * </ol>
+ * Inside the same type the items are intuitively ordered by row and col, both ascending. The
+ * original owner id may also be considered for multiple dead ants on the same square.
+ * 
+ * @param {Number}
+ *        player The index of the participating player.
+ * @param {Number}
+ *        min The first turn.
+ * @param {Number}
+ *        max The last turn.
+ * @returns {String} The bot input text.
+ */
+Replay.prototype.generateBotInput = function(player, min, max) {
+	var turn, value, fakeTurn, map, fog, i, r, c, ants, food, hills;
+	var dir, moves, visible_hills, visible_ants, visible_food, visible_dead;
+	var ant, ant_locations, loc;
+	var param = undefined;
+	var playerNum = 0;
+	var mappedIds = new Array(this.players);
+	var resolvePlayer = function(original) {
+		if (mappedIds[original] === undefined) {
+			mappedIds[original] = playerNum;
+			playerNum++;
+		}
+		return mappedIds[original];
+	};
+	resolvePlayer(player);
+	var botInput = 'turn 0\n';
+	var entityPush = function(t, array, row, col, owner) {
+		if (t >= min) {
+			array[array.length] = [ row, col, owner ];
+		}
+		if (owner !== undefined) resolvePlayer(owner);
+	};
+	var entityAppend = function(type, entityList) {
+		var k, entity;
+		entityList.sort(function(a, b) {
+			if (a[0] !== b[0]) return a[0] - b[0];
+			if (a[1] !== b[1]) return a[1] - b[1];
+			return a[2] - b[2];
+		});
+		for (k = 0; k < entityList.length; k++) {
+			entity = entityList[k];
+			botInput += type + ' ' + entity[0] + ' ' + entity[1];
+			if (entity[2] !== undefined) {
+				botInput += ' ' + resolvePlayer(entity[2]);
+			}
+			botInput += '\n';
+		}
+	};
+
+	// game settings (including numbers not usually send to the player)
+	if (this.meta['replaydata']['revision'] !== 3) {
+		throw new Error('Can only generate bot input for revision 3 replays!');
+	}
+	botInput += 'rows ' + this.rows + '\n';
+	botInput += 'cols ' + this.cols + '\n';
+	for (param in this.meta['replaydata']) {
+		if (param === 'revision') continue;
+		if (param === 'food_rate') continue;
+		if (param === 'food_turn') continue;
+		if (param === 'food_start') continue;
+		if (param === 'engine_seed') continue;
+		if (param === 'winning_turn') continue;
+		if (param === 'ranking_turn') continue;
+		value = this.meta['replaydata'][param];
+		if (typeof value == 'number' && !isNaN(value) && isFinite(value)) {
+			botInput += param + ' ' + value + '\n';
+		}
+	}
+	botInput += 'ready\n';
+
+	// helpful data structures
+	map = new Array(this.rows);
+	for (r = 0; r < map.length; r++) {
+		map[r] = new Array(this.cols);
+	}
+	ants = this.meta['replaydata']['ants'];
+	ant_locations = new Array(ants.length);
+
+	// create ant location lists over the course of the requested turns
+	for (i = 0; i < ant_locations.length; i++) {
+		ant_locations[i] = new Array(max + 1);
+		ant = ants[i];
+		r = ant[0];
+		c = ant[1];
+		ant_locations[i][ant[2]] = [ r, c ];
+		moves = new String(ant[5]);
+		for (turn = 0; turn < moves.length;) {
+			dir = undefined;
+			switch (moves.charAt(turn)) {
+			case 'n':
+			case 'N':
+				dir = Direction.N;
+				break;
+			case 'e':
+			case 'E':
+				dir = Direction.E;
+				break;
+			case 's':
+			case 'S':
+				dir = Direction.S;
+				break;
+			case 'w':
+			case 'W':
+				dir = Direction.W;
+			}
+			if (dir) {
+				r = Math.wrapAround(r + dir.y, this.rows);
+				c = Math.wrapAround(c + dir.x, this.cols);
+			}
+			turn++;
+			ant_locations[i][ant[2] + turn] = [ r, c ];
+		}
+	}
+
+	// turns; we have to simulate from the start to get the
+	// player id translations right
+	fakeTurn = 0;
+	for (turn = 0; turn <= max; turn++) {
+		// check visible player entities
+		fog = this.getFog(player, turn);
+		visible_hills = [];
+		visible_ants = [];
+		visible_food = [];
+		visible_dead = [];
+		// hills must not be razed and visible
+		hills = this.meta['replaydata']['hills'];
+		for (i = 0; i < hills.length; i++) {
+			if (turn < hills[i][3] && !fog[hills[i][0]][hills[i][1]]) {
+				entityPush(turn, visible_hills, hills[i][0], hills[i][1], hills[i][2]);
+			}
+		}
+		// alive ants must be visible
+		// dead ants must be visible or belong to the player
+		for (i = 0; i < ants.length; i++) {
+			loc = ant_locations[i][turn];
+			if (ants[i][2] <= turn) {
+				if (turn < ants[i][3]) {
+					if (!fog[loc[0]][loc[1]]) {
+						entityPush(turn, visible_ants, loc[0], loc[1], ants[i][4]);
+					}
+				} else if (turn === ants[i][3]) {
+					if (ants[i][4] === player || !fog[loc[0]][loc[1]]) {
+						entityPush(turn, visible_dead, loc[0], loc[1], ants[i][4]);
+					}
+				}
+			}
+		}
+		if (turn >= min) {
+			// we actually write something
+			fakeTurn++;
+			botInput += 'turn ' + fakeTurn + '\n';
+			// send water info once
+			for (r = 0; r < this.rows; r++) {
+				for (c = 0; c < this.cols; c++) {
+					if (!fog[r][c]) {
+						if (map[r][c] === undefined) {
+							if (map[r][c] = this.walls[r][c]) {
+								botInput += 'w ' + r + ' ' + c + '\n';
+							}
+						}
+					}
+				}
+			}
+			// send hills
+			entityAppend('h', visible_hills);
+			// send alive ants
+			entityAppend('a', visible_ants);
+			// send visible food
+			food = this.meta['replaydata']['food'];
+			for (i = 0; i < food.length; i++) {
+				if (food[i][2] <= turn && turn < food[i][3] && !fog[food[i][0]][food[i][1]]) {
+					entityPush(turn, visible_food, food[i][0], food[i][1]);
+				}
+			}
+			entityAppend('f', visible_food);
+			// send dead ants
+			entityAppend('d', visible_dead);
+			botInput += 'go\n';
+		}
+	}
+	return botInput;
 };
 
 /**

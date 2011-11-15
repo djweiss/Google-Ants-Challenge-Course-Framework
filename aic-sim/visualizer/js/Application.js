@@ -149,6 +149,7 @@ Visualizer = function(container, options, w, h, configOverrides) {
 		/** @private */
 		this.imgMgr = new ImageManager(imgDir, new Delegate(this, this.completedImages));
 		this.imgMgr.add('water.png');
+		this.imgMgr.add('hill.png');
 		if (this.state.options['decorated']) {
 			this.imgMgr.add('playback.png');
 			this.imgMgr.add('fog.png');
@@ -156,9 +157,9 @@ Visualizer = function(container, options, w, h, configOverrides) {
 			/** @private */
 			this.btnMgr = new ButtonManager(null);
 			/** @private */
-			this.scores = new CanvasElementStats(this.state, 'scores', 'scores');
+			this.scores = new CanvasElementStats(this.state, 'scores', 'scores', 'bonus');
 			/** @private */
-			this.counts = new CanvasElementStats(this.state, '# of ants', 'counts');
+			this.counts = new CanvasElementStats(this.state, '# of ants', 'counts', 'hive');
 		}
 		/** @private */
 		this.director = new Director(this);
@@ -459,7 +460,7 @@ Visualizer.prototype.streamingInit = function() {
 Visualizer.prototype.streamingStart = function() {
 	this.state.isStreaming = stream.visualizerReady();
 	if (this.loading === LoadingState.LOADING) {
-		if (this.state.replay.duration > 0) {
+		if (this.state.replay.hasDuration) {
 			// set CPU to 100%, we need it
 			this.director.cpu = 1;
 			this.loadCanvas();
@@ -477,6 +478,16 @@ Visualizer.prototype.streamingStart = function() {
 			this.director.play();
 		}
 	}
+};
+
+/**
+ * Makes the visualizer output video frames at a fixed rate
+ * 
+ * @param {Number}
+ *        fpt the number of frames per turn
+ */
+Visualizer.prototype.javaVideoOutput = function(fpt) {
+	this.director.fixedFpt = fpt;
 };
 
 /**
@@ -550,25 +561,58 @@ Visualizer.prototype.completedImages = function(error) {
  * @private
  */
 Visualizer.prototype.tryStart = function() {
-	var bg, i, dlg;
+	var bg, i, k, dlg, scores;
 	var vis = this;
 	// we need to parse the replay, unless it has been parsed by the
 	// XmlHttpRequest callback
 	if (this.state.replay) {
 		if (!this.main.ctx) return;
+		if (this.imgMgr.pending !== 0) return;
+		// colorize ant hill
+		colors = [];
+		for (i = 0; i < this.state.replay.players; i++) {
+			colors.push(this.state.replay.meta['playercolors'][i]);
+		}
+		this.imgMgr.colorize(1, colors);
+		this.antsMap.setHillImage(this.imgMgr.patterns[1]);
+		// add GUI
 		if (this.state.options['decorated']) {
 			if (this.imgMgr.error) return;
 			if (this.imgMgr.pending) return;
 			this.btnMgr.ctx = this.main.ctx;
+			// calculate player order
+			if (this.state.replay.meta['replaydata']['bonus']) {
+				scores = new Array(this.state.replay.players);
+				for (i = 0; i < this.state.replay.players; i++) {
+					scores[i] = this.state.replay['scores'][this.state.replay.duration][i];
+					scores[i] += this.state.replay.meta['replaydata']['bonus'][i];
+				}
+			} else {
+				scores = this.state.replay['scores'][this.state.replay.duration];
+			}
+			this.state.ranks = new Array(scores.length);
+			this.state.order = new Array(scores.length);
+			for (i = 0; i < scores.length; i++) {
+				this.state.ranks[i] = 1;
+				for (k = 0; k < scores.length; k++) {
+					if (scores[i] < scores[k]) {
+						this.state.ranks[i]++;
+					}
+				}
+				k = this.state.ranks[i] - 1;
+				while (this.state.order[k] !== undefined)
+					k++;
+				this.state.order[k] = i;
+			}
 			// add player buttons
 			if (this.state.replay.hasDuration) {
 				this.addPlayerButtons();
 			}
+			// add static buttons
 			if (this.state.options['interactive']) {
-				// add static buttons
 				if (!this.btnMgr.groups['playback']) {
 					if (this.state.replay.hasDuration) {
-						bg = this.btnMgr.addImageGroup('playback', this.imgMgr.images[1],
+						bg = this.btnMgr.addImageGroup('playback', this.imgMgr.images[2],
 								ImageButtonGroup.HORIZONTAL, ButtonGroup.MODE_NORMAL, 2, 0);
 
 						dlg = new Delegate(this, function() {
@@ -601,7 +645,7 @@ Visualizer.prototype.tryStart = function() {
 						bg.addButton(2, dlg, 'jump to end of the last turn');
 					}
 
-					bg = this.btnMgr.addImageGroup('toolbar', this.imgMgr.images[3],
+					bg = this.btnMgr.addImageGroup('toolbar', this.imgMgr.images[4],
 							ImageButtonGroup.VERTICAL, ButtonGroup.MODE_NORMAL, 2, 0);
 
 					if (this.state.config.hasLocalStorage()) {
@@ -651,16 +695,15 @@ Visualizer.prototype.tryStart = function() {
 
 						dlg = new Delegate(this, this.modifySpeed, [ -1 ]);
 						bg.addButton(7, dlg);
+
+						dlg = new Delegate(this, this.generateBotInput);
+						bg.addButton(8, dlg, 'regenerates bot input from this replay');
 					}
 				}
 				// generate fog images
 				if (this.state.replay.hasDuration) {
-					colors = [];
-					for (i = 0; i < this.state.replay.players; i++) {
-						colors.push(this.state.replay.meta['playercolors'][i]);
-					}
-					this.imgMgr.colorize(2, colors);
-					bg = this.btnMgr.addImageGroup('fog', this.imgMgr.patterns[2],
+					this.imgMgr.colorize(3, colors);
+					bg = this.btnMgr.addImageGroup('fog', this.imgMgr.patterns[3],
 							ImageButtonGroup.VERTICAL, ButtonGroup.MODE_RADIO, 2);
 					var buttonAdder = function(fog) {
 						var dlg = new Delegate(vis, vis.showFog);
@@ -681,7 +724,7 @@ Visualizer.prototype.tryStart = function() {
 			if (this.state.options['decorated']) {
 				this.director.onstate = function() {
 					var btn = vis.btnMgr.groups['playback'].buttons[4];
-					btn.offset = (vis.director.playing() ? 7 : 4) * vis.imgMgr.images[1].height;
+					btn.offset = (vis.director.playing() ? 7 : 4) * vis.imgMgr.images[2].height;
 					if (btn === vis.btnMgr.pinned) {
 						vis.btnMgr.pinned = null;
 					}
@@ -845,43 +888,23 @@ Visualizer.prototype.calculateMapCenter = function(scale) {
  * @private
  */
 Visualizer.prototype.addPlayerButtons = function() {
-	var scores, i, k;
+	var i;
 	var bg = this.btnMgr.addTextGroup('players', ButtonGroup.MODE_NORMAL, 2);
 	var vis = this;
 	var dlg = undefined;
-	var gameId = this.state.replay.meta['game_id'] || this.state.options['game'];
-	if (gameId !== undefined) {
+	var gameId = this.state.replay.meta['game_id'];
+	if (gameId === undefined && this.state.options['game']) {
+		gameId = this.state.options['game'];
+	}
+	if (gameId === undefined) {
+		bg.addButton('Players:', '#000', undefined);
+	} else {
 		if (this.state.replay.meta['game_url']) {
 			dlg = new Delegate(this, function() {
 				window.location.href = this.state.replay.meta['game_url'].replace('~', gameId);
 			});
 		}
 		bg.addButton('Game #' + gameId + ':', '#000', dlg);
-	} else {
-		bg.addButton('Players:', '#000', undefined);
-	}
-	if (this.state.replay.meta['replaydata']['bonus']) {
-		scores = new Array(this.state.replay.players);
-		for (i = 0; i < this.state.replay.players; i++) {
-			scores[i] = this.state.replay['scores'][this.state.replay.duration][i];
-			scores[i] += this.state.replay.meta['replaydata']['bonus'][i];
-		}
-	} else {
-		scores = this.state.replay['scores'][this.state.replay.duration];
-	}
-	this.state.ranks = new Array(scores.length);
-	this.state.order = new Array(scores.length);
-	for (i = 0; i < scores.length; i++) {
-		this.state.ranks[i] = 1;
-		for (k = 0; k < scores.length; k++) {
-			if (scores[i] < scores[k]) {
-				this.state.ranks[i]++;
-			}
-		}
-		k = this.state.ranks[i] - 1;
-		while (this.state.order[k] !== undefined)
-			k++;
-		this.state.order[k] = i;
 	}
 	var buttonAdder = function(idx) {
 		var color = vis.state.replay.htmlPlayerColors[idx];
@@ -999,10 +1022,16 @@ Visualizer.prototype.setFullscreen = function(enable) {
 Visualizer.prototype.setZoom = function(zoom) {
 	var oldScale = this.state.scale;
 	var effectiveZoom = Math.max(1, zoom);
-	this.state.config['zoom'] = effectiveZoom;
-	this.state.scale = Math.max(1, Math.min((this.shiftedMap.w - 20) / (this.state.replay.cols),
-			(this.shiftedMap.h - 20) / (this.state.replay.rows))) | 0;
-	this.state.scale = Math.min(ZOOM_SCALE, this.state.scale * effectiveZoom);
+	if (this.director.fixedFpt === undefined) {
+		this.state.config['zoom'] = effectiveZoom;
+		this.state.scale = Math.max(1, Math.min((this.shiftedMap.w - 20) / this.state.replay.cols,
+				(this.shiftedMap.h - 20) / this.state.replay.rows)) | 0;
+		this.state.scale = Math.min(ZOOM_SCALE, this.state.scale * effectiveZoom);
+	} else {
+		this.state.scale = Math.max(1, Math.min(this.shiftedMap.w / this.state.replay.cols,
+				this.shiftedMap.h / this.state.replay.rows)) | 0;
+		this.state.scale = Math.pow(2, (Math.log(this.state.scale) / Math.LN2) | 0);
+	}
 	if (oldScale) {
 		this.state.shiftX = (this.state.shiftX * this.state.scale / oldScale) | 0;
 		this.state.shiftY = (this.state.shiftY * this.state.scale / oldScale) | 0;
@@ -1010,8 +1039,8 @@ Visualizer.prototype.setZoom = function(zoom) {
 	this.calculateMapCenter(this.state.scale);
 	this.map.setSize(this.state.scale * this.state.replay.cols, this.state.scale
 			* this.state.replay.rows);
-	this.map.x = ((this.shiftedMap.w - this.map.w) / 2 + this.shiftedMap.x) | 0;
-	this.map.y = ((this.shiftedMap.h - this.map.h) / 2 + this.shiftedMap.y) | 0;
+	this.map.x = (((this.shiftedMap.w - this.map.w) >> 1) + this.shiftedMap.x) | 0;
+	this.map.y = (((this.shiftedMap.h - this.map.h) >> 1) + this.shiftedMap.y) | 0;
 	this.antsMap.setSize(this.map.w, this.map.h);
 	this.fog.setSize(Math.min(this.map.w, this.shiftedMap.w), Math.min(this.map.h,
 			this.shiftedMap.h));
@@ -1033,11 +1062,13 @@ Visualizer.prototype.setZoom = function(zoom) {
  *        {Number} 0 = no display, 1 = letters, 2 = global ant ids
  */
 Visualizer.prototype.setAntLabels = function(mode) {
-	var recap = (mode === 1) !== (this.state.config['label'] === 1);
+	var hasDuration = this.state.replay.hasDuration;
+	var recap = hasDuration && (mode === 1) !== (this.state.config['label'] === 1);
 	this.state.config['label'] = mode;
 	if (recap) {
 		this.updatePlayerButtonText();
-		this.main.ctx.clearRect(0, 0, this.main.canvas.width, this.main.canvas.height);
+		this.main.ctx.fillStyle = '#fff';
+		this.main.ctx.fillRect(0, 0, this.main.canvas.width, this.main.canvas.height);
 		this.resize(true);
 	}
 };
@@ -1106,13 +1137,12 @@ Visualizer.prototype.resize = function(forced) {
 				this.shiftedMap.y = y;
 				this.shiftedMap.setSize(newSize.w - LEFT_PANEL_W - RIGHT_PANEL_W, newSize.h - y
 						- BOTTOM_PANEL_H);
+				// playback buttons are center, unless they would exceed the right border of the map
 				var bg = this.btnMgr.groups['playback'];
 				w = 8 * 64;
-				if (w <= newSize.w) {
-					bg.x = ((newSize.w - w) / 2) | 0;
-				} else {
-					bg.x = 0;
-				}
+				bg.x = ((newSize.w - w) / 2) | 0;
+				bg.x = Math.min(bg.x, this.shiftedMap.x + this.shiftedMap.w - w);
+				bg.x = Math.max(bg.x, 0);
 				bg.y = this.shiftedMap.y + this.shiftedMap.h;
 				bg = this.btnMgr.groups['fog'];
 				bg.y = this.shiftedMap.y + 8;
@@ -1129,7 +1159,7 @@ Visualizer.prototype.resize = function(forced) {
 				bg = this.btnMgr.groups['fog'];
 				bg.h = newSize.h - this.shiftedMap.y - 8;
 				bg = this.btnMgr.groups['playback'];
-				bg.w = newSize.w - 2 * 48;
+				bg.w = this.shiftedMap.x + this.shiftedMap.w - bg.x;
 			}
 			bg = this.btnMgr.groups['toolbar'];
 			bg.h = newSize.h - this.shiftedMap.y - 8;
@@ -1261,12 +1291,15 @@ Visualizer.prototype.draw = function() {
 		ctx.fillStyle = '#fff';
 		ctx.fillText(hint, loc.x, loc.y + 10);
 	}
-	// we were able to draw a frame, the engine may send us the next turn
 	if (this.state.isStreaming) {
+		// we were able to draw a frame, the engine may send us the next turn
 		var vis = this;
 		window.setTimeout(function() {
 			if (vis.state.isStreaming) vis.streamingStart();
 		}, 0);
+	} else if (this.director.fixedFpt !== undefined) {
+		// store frame
+		video.captureFrame(this.director.time, this.director.duration);
 	}
 };
 
@@ -1357,7 +1390,7 @@ Visualizer.prototype.mousePressed = function() {
 			return;
 		}
 		this.mouseMoved(this.mouseX, this.mouseY);
-	} else {
+	} else if (this.state.options['decorated']) {
 		// handle game/player links if in non-interactive mode
 		this.btnMgr.mouseDown();
 	}
@@ -1400,50 +1433,137 @@ Visualizer.prototype.mouseExited = function() {
  */
 Visualizer.prototype.keyPressed = function(key) {
 	var d = this.director;
-	switch (key) {
-	case Key.SPACE:
-		d.playStop();
-		break;
-	case Key.LEFT:
-		d.gotoTick(Math.ceil(this.state.time) - 1);
-		break;
-	case Key.RIGHT:
-		d.gotoTick(Math.floor(this.state.time) + 1);
-		break;
-	case Key.PGUP:
-		d.gotoTick(Math.ceil(this.state.time) - 10);
-		break;
-	case Key.PGDOWN:
-		d.gotoTick(Math.floor(this.state.time) + 10);
-		break;
-	case Key.HOME:
-		d.gotoTick(0);
-		break;
-	case Key.END:
-		d.gotoTick(d.duration);
-		break;
-	case Key.PLUS:
-	case Key.PLUS_OPERA:
-	case Key.PLUS_JAVA:
-		this.modifySpeed(+1);
-		break;
-	case Key.MINUS:
-	case Key.MINUS_JAVA:
-		this.modifySpeed(-1);
-		break;
-	default:
-		switch (String.fromCharCode(key)) {
-		case 'F':
-			this.setFullscreen(!this.state.config['fullscreen']);
+	var tryOthers = true;
+	if (!this.state.options['embedded']) {
+		tryOthers = false;
+		switch (key) {
+		case Key.PGUP:
+			d.gotoTick(Math.ceil(this.state.time) - 10);
 			break;
-		case 'C':
-			this.centerMap();
+		case Key.PGDOWN:
+			d.gotoTick(Math.floor(this.state.time) + 10);
+			break;
+		case Key.HOME:
+			d.gotoTick(0);
+			break;
+		case Key.END:
+			d.gotoTick(d.duration);
 			break;
 		default:
-			return false;
+			tryOthers = true;
+		}
+	}
+	if (tryOthers) {
+		switch (key) {
+		case Key.SPACE:
+			d.playStop();
+			break;
+		case Key.LEFT:
+			d.gotoTick(Math.ceil(this.state.time) - 1);
+			break;
+		case Key.RIGHT:
+			d.gotoTick(Math.floor(this.state.time) + 1);
+			break;
+		case Key.PLUS:
+		case Key.PLUS_OPERA:
+		case Key.PLUS_JAVA:
+			this.modifySpeed(+1);
+			break;
+		case Key.MINUS:
+		case Key.MINUS_JAVA:
+			this.modifySpeed(-1);
+			break;
+		default:
+			switch (String.fromCharCode(key)) {
+			case 'F':
+				this.setFullscreen(!this.state.config['fullscreen']);
+				break;
+			case 'C':
+				this.centerMap();
+				break;
+			case 'I':
+				this.generateBotInput();
+				break;
+			default:
+				return false;
+			}
 		}
 	}
 	return true;
+};
+
+/**
+ * This method will ask the user for some input to convert the replay into a bot input string for
+ * debugging.
+ */
+Visualizer.prototype.generateBotInput = function() {
+	var player, user_id, user_index, min, max, current, turns, valid, i;
+	var botInput, dataUri, gameId;
+	try {
+		if (!this.state.replay.hasDuration) return;
+		// pause the replay
+		this.director.stop();
+		// first we need to know the player
+		player = '';
+		user_id = this.state.options['user'];
+		if (user_id) {
+			user_index = this.state.replay.meta['user_ids'].indexOf(user_id, 0);
+			if (user_index !== -1) {
+				player = this.state.replay.meta['playernames'][user_index];
+			}
+		}
+		do {
+			player = prompt('Enter the player name for which you want to generate bot input.',
+					player);
+			valid = true;
+			if (player) {
+				user_index = this.state.replay.meta['playernames'].indexOf(player, 0);
+				valid = user_index !== -1;
+				if (valid) {
+					min = 1;
+					max = this.state.replay.duration;
+					current = 1 + (this.state.time | 0);
+					do {
+						turns = prompt(
+								'Enter a range of turns or a single turn number to be included in the output.\nThe largest valid range for this replay is '
+										+ min + '-' + max + '.', min + '-' + current);
+						valid = true;
+						if (turns) {
+							turns = turns.split('-');
+							valid = turns.length <= 2;
+							for (i = 0; i < turns.length; i++) {
+								valid = valid && /^[0-9]+$/.test(turns[i]);
+								valid = valid && !isNaN(turns[i] = parseInt(turns[i]));
+							}
+							valid = valid && turns[0] >= min;
+							valid = valid && turns[turns.length - 1] <= max;
+							if (valid) {
+								min = turns[0] - 1;
+								max = turns[turns.length - 1] - 1;
+								botInput = this.state.replay.generateBotInput(user_index, min, max);
+								if (window.saveText) {
+									// Java version
+									gameId = this.state.replay.meta['game_id']
+											|| this.state.options['game'] || 0;
+									window.saveText(botInput, gameId + '.bot' + user_index
+											+ '.input');
+								} else {
+									dataUri = 'data:text/plain;charset=utf-8,' + escape(botInput);
+									window.open(dataUri, '_blank');
+								}
+							} else {
+								alert('Invalid input.');
+							}
+						}
+					} while (!valid);
+				} else {
+					alert('Invalid user name.');
+				}
+			}
+		} while (!valid);
+	} catch (e) {
+		alert('Error while generating bot input: ' + e);
+	}
 };
 
 /**
@@ -1480,6 +1600,7 @@ Visualizer.prototype.keyPressed = function(key) {
  *           {@link Options#row} to jump to a specific event.
  * @property {String} user If set, the replay will give this user id the first color in the list so
  *           it can easily be identified on the map.
+ * @property {Boolean} loop If set, the replay will fade out and start again at the end.
  */
 Options = function() {
 	this['data_dir'] = '';
@@ -1493,6 +1614,7 @@ Options = function() {
 	this['row'] = NaN;
 	this['turn'] = NaN;
 	this['user'] = '';
+	this['loop'] = false;
 };
 
 /**
@@ -1528,6 +1650,8 @@ Options.toBool = function(value) {
  * @property {Boolean} isStreaming This should be true as long as the visualizer is receiving data
  *           from a game in progress and be set to false when the last turn has been sent as
  *           indicated by the result of Stream.visualizerReady() in Stream.java.
+ * @property fade Undefined, unless a fade out/in effect is to be drawn. Then this is set to a
+ *           rgba() fill style.
  */
 function State() {
 	this.cleanUp();
@@ -1551,6 +1675,7 @@ State.prototype.cleanUp = function() {
 	this.mouseCol = undefined;
 	this.mouseRow = undefined;
 	this.isStreaming = false;
+	this.fade = undefined;
 };
 
 /**
